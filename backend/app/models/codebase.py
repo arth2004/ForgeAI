@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -191,7 +192,11 @@ class CodeChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     context_header: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    search_vector: Mapped[str | None] = mapped_column(TsVector, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(
+        TsVector,
+        Computed("to_tsvector('english', coalesce(content, ''))", persisted=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
     )
