@@ -14,7 +14,9 @@ os.environ["ENCRYPTION_KEY"] = "0123456789abcdef0123456789abcdef0123456789abcdef
 
 import app.models  # noqa: F401
 from app.core.database import get_db
+from app.core.security import create_access_token, hash_password
 from app.main import app as fastapi_app
+from app.models.auth import User
 from app.models.base import Base
 
 # In-memory SQLite async engine for tests
@@ -59,3 +61,25 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
     fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user(db_session: AsyncSession) -> User:
+    """Creates a standard test user in the database."""
+    user = User(
+        email="developer@forgeai.dev",
+        hashed_password=hash_password("TestPassword123!"),
+        full_name="Forge Developer",
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def auth_headers(test_user: User) -> dict[str, str]:
+    """Generates valid Bearer authentication headers for test_user."""
+    token = create_access_token(str(test_user.id))
+    return {"Authorization": f"Bearer {token}"}

@@ -53,9 +53,13 @@ class Repository(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     github_repo_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     default_branch: Mapped[str] = mapped_column(String(255), default="main", nullable=False)
     is_private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    html_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(String(100), nullable=True)
     indexing_status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, name="indexing_status_enum", native_enum=False), default=IndexingStatus.pending, nullable=False
     )
@@ -77,6 +81,7 @@ class RepositoryBranch(Base, UUIDMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     latest_commit_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    is_protected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     repository: Mapped["Repository"] = relationship("Repository", back_populates="branches")

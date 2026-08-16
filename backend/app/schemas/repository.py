@@ -12,6 +12,10 @@ class RepositoryCreate(BaseModel):
     default_branch: str = Field(default="main")
     is_private: bool = Field(default=False)
     github_repo_id: int | None = None
+    owner: str | None = None
+    html_url: str | None = None
+    description: str | None = None
+    language: str | None = None
 
 
 class RepositoryBranchResponse(BaseModel):
@@ -21,6 +25,7 @@ class RepositoryBranchResponse(BaseModel):
     repository_id: uuid.UUID
     name: str
     latest_commit_sha: str | None = None
+    is_protected: bool = False
     indexed_at: datetime | None = None
     created_at: datetime
 
@@ -31,9 +36,13 @@ class RepositoryResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     github_repo_id: int | None = None
+    owner: str | None = None
     full_name: str
     default_branch: str
     is_private: bool
+    html_url: str | None = None
+    description: str | None = None
+    language: str | None = None
     indexing_status: IndexingStatus
     created_at: datetime
     updated_at: datetime

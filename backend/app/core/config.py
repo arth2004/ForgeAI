@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -45,8 +46,25 @@ class Settings(BaseSettings):
 
     # PostgreSQL Database
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/forgeai"
+        default="postgresql+asyncpg://postgres:postgres@localhost:5433/forgeai"
     )
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_db_url(cls, v: Any) -> str:
+        if isinstance(v, str):
+            # Guard against host OS environment variable contamination from unrelated projects
+            if "expense_splitter" in v:
+                v = "postgresql+asyncpg://postgres:postgres@localhost:5433/forgeai"
+            if v.startswith("postgresql://"):
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+            if "schema=" in v:
+                v = re.sub(r"[\?\&]schema=[^\&]+", "", v)
+                if "?" not in v and "&" in v:
+                    v = v.replace("&", "?", 1)
+        return str(v)
 
     # Redis Cache & Broker
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
@@ -62,6 +80,15 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = Field(
         default="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     )
+
+    # GitHub App Integration
+    GITHUB_APP_ID: str = Field(default="")
+    GITHUB_APP_SLUG: str = Field(default="forge-ai-app")
+    GITHUB_CLIENT_ID: str = Field(default="")
+    GITHUB_CLIENT_SECRET: str = Field(default="")
+    GITHUB_PRIVATE_KEY: str = Field(default="")
+    GITHUB_PRIVATE_KEY_PATH: str = Field(default="")
+    GITHUB_REDIRECT_URI: str = Field(default="http://localhost:8000/api/v1/github/callback")
 
     # Frontend URL
     FRONTEND_URL: str = Field(default="http://localhost:3000")

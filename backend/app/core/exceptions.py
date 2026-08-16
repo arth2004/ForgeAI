@@ -13,9 +13,14 @@ class ForgeAIException(Exception):
 
 
 class NotFoundException(ForgeAIException):
-    def __init__(self, resource: str, identifier: Any):
+    def __init__(self, resource: str, identifier: Any | None = None):
+        message = (
+            f"{resource} with identifier '{identifier}' was not found."
+            if identifier is not None
+            else f"{resource} was not found."
+        )
         super().__init__(
-            message=f"{resource} with identifier '{identifier}' was not found.",
+            message=message,
             status_code=status.HTTP_404_NOT_FOUND,
         )
 

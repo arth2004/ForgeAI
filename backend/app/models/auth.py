@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Enum, ForeignKey, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import BigInteger, Boolean, Enum, ForeignKey, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -21,6 +21,9 @@ class User(Base, UUIDMixin, TimestampMixin):
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     encrypted_github_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    github_username: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    github_installation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     memberships: Mapped[list["Membership"]] = relationship(

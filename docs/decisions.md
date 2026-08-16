@@ -267,12 +267,20 @@ During GitHub App installation, the user or organization administrator explicitl
 Forge AI can only discover and access repositories that were explicitly selected and granted by the user.
 
 #### 4. Token Architecture & Lifecycle
-* **User-to-Server Token**: Obtained via the GitHub App User Authorization flow. Used to identify the authenticated user and list their app installations.
-* **Installation Access Token (Server-to-Server)**: Generated on demand using the GitHub App's private key (RS256 JWT) for a specific `installation_id`.
-  * **Short-Lived Lifetime**: Automatically expires in **1 hour** (enforced by GitHub).
-  * **Scoped Access**: Scoped exclusively to the repositories granted to that installation.
-  * **Storage & Encryption**: Stored tokens and private keys are encrypted at rest using AES-256-GCM and never exposed to the frontend or included in application logs.
-* **Revocation**: If a user uninstalls the GitHub App or removes a repository from the installation in their GitHub Settings, all future token generation requests immediately fail.
+* **Durable Metadata Persistence**:
+  * We persist only durable installation and identity metadata in PostgreSQL: `github_user_id`, `github_username`, `github_installation_id`, `avatar_url`, and `created_at`/`updated_at`.
+  * **Zero Database Persistence for Ephemeral Tokens**: Short-lived Installation Access Tokens (1 hour TTL) are **NOT** stored as durable records in PostgreSQL.
+* **On-Demand Token Generation**:
+  * The backend generates an authenticated RS256 JWT using the GitHub App's Private Key.
+  * The backend calls GitHub's `POST /app/installations/{installation_id}/access_tokens` to obtain a fresh, short-lived Installation Access Token.
+  * Tokens are used in-flight for API calls and discarded (or cached strictly in ephemeral memory with TTL < 50 minutes).
+* **Granular Repository Scoping for Tokens**:
+  * The token generation service accepts an optional `repository_ids: list[int] | None` parameter, allowing installation tokens to be scoped down to specific repository IDs on demand.
+* **Storage & Encryption**:
+  * Durable secrets (e.g., App Private Key, OAuth user refresh tokens) are encrypted at rest using **AES-256-GCM**.
+  * Tokens and private keys never leave the server-side backend and are stripped from all API responses and logs.
+* **Revocation**:
+  * If a user uninstalls the GitHub App or removes repositories in their GitHub Settings, future token generation calls fail immediately. Disconnecting in Forge AI clears the local installation mapping.
 
 ### Consequences
 - **Positive**:
