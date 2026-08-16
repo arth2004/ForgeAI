@@ -75,15 +75,8 @@ class GitHubAuthService:
 
     @classmethod
     def get_authorization_url(cls, user_id: uuid.UUID) -> str:
-        """Generates the GitHub App installation / authorization URL with signed state."""
+        """Generates the GitHub OAuth authorization URL with signed state."""
         state = cls.generate_state(user_id)
-
-        # If GitHub App slug is provided, route directly to the App installation page
-        if settings.GITHUB_APP_SLUG and settings.GITHUB_APP_SLUG != "forge-ai-app":
-            params = {"state": state}
-            return f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?{urlencode(params)}"
-
-        # Otherwise fallback to standard OAuth authorize URL
         params = {
             "client_id": settings.GITHUB_CLIENT_ID,
             "redirect_uri": settings.GITHUB_REDIRECT_URI,
@@ -114,8 +107,12 @@ class GitHubAuthService:
 
             data = response.json()
             if "error" in data:
-                logger.error(f"GitHub OAuth token exchange error: {data.get('error_description', data['error'])}")
-                raise UnauthorizedException(f"GitHub authorization failed: {data.get('error_description', data['error'])}")
+                logger.error(
+                    f"GitHub OAuth token exchange error: {data.get('error_description', data['error'])}"
+                )
+                raise UnauthorizedException(
+                    f"GitHub authorization failed: {data.get('error_description', data['error'])}"
+                )
 
             return data["access_token"]
 
@@ -170,13 +167,20 @@ class GitHubAuthService:
                         inst_details = await github_client.get_installation(installation_id)
                         account_id = inst_details.get("account", {}).get("id")
                         account_login = inst_details.get("account", {}).get("login", "").lower()
-                        if account_id != github_uid and account_login != (github_login or "").lower():
-                            raise UnauthorizedException("The specified GitHub installation does not belong to your account.")
+                        if (
+                            account_id != github_uid
+                            and account_login != (github_login or "").lower()
+                        ):
+                            raise UnauthorizedException(
+                                "The specified GitHub installation does not belong to your account."
+                            )
                     except Exception as exc:
                         if isinstance(exc, UnauthorizedException):
                             raise
                         logger.error(f"Failed to verify installation ownership: {exc}")
-                        raise UnauthorizedException("Could not verify ownership of the GitHub App installation.") from exc
+                        raise UnauthorizedException(
+                            "Could not verify ownership of the GitHub App installation."
+                        ) from exc
                 user.github_installation_id = installation_id
             elif user_inst_ids:
                 # Auto-assign first authorized installation if none specified in query
@@ -185,25 +189,36 @@ class GitHubAuthService:
         elif installation_id:
             # If only installation_id is provided without OAuth code, verify the user already has a connected GitHub identity
             if not user.github_user_id:
-                raise UnauthorizedException("Cannot link installation without authenticated GitHub user identity.")
+                raise UnauthorizedException(
+                    "Cannot link installation without authenticated GitHub user identity."
+                )
             # Verify installation ownership via App JWT
             try:
                 inst_details = await github_client.get_installation(installation_id)
                 account_id = inst_details.get("account", {}).get("id")
                 account_login = inst_details.get("account", {}).get("login", "").lower()
-                if account_id != user.github_user_id and account_login != (user.github_username or "").lower():
-                    raise UnauthorizedException("The specified GitHub installation does not belong to your account.")
+                if (
+                    account_id != user.github_user_id
+                    and account_login != (user.github_username or "").lower()
+                ):
+                    raise UnauthorizedException(
+                        "The specified GitHub installation does not belong to your account."
+                    )
             except Exception as exc:
                 if isinstance(exc, UnauthorizedException):
                     raise
                 logger.error(f"Failed to verify installation ownership: {exc}")
-                raise UnauthorizedException("Could not verify ownership of the GitHub App installation.") from exc
+                raise UnauthorizedException(
+                    "Could not verify ownership of the GitHub App installation."
+                ) from exc
 
             user.github_installation_id = installation_id
 
         await db.commit()
         await db.refresh(user)
-        logger.info(f"Connected GitHub for user {user.id}: @{user.github_username} (installation: {user.github_installation_id})")
+        logger.info(
+            f"Connected GitHub for user {user.id}: @{user.github_username} (installation: {user.github_installation_id})"
+        )
         return user
 
     @classmethod

@@ -14,12 +14,14 @@ from app.core.telemetry import logger
 
 class GitHubRateLimitError(ForbiddenException):
     """Raised when GitHub API rate limits are exceeded."""
+
     def __init__(self, message: str = "GitHub API rate limit exceeded. Please try again later."):
         super().__init__(message)
 
 
 class GitHubApiError(Exception):
     """Generic GitHub API failure."""
+
     def __init__(self, status_code: int, message: str):
         super().__init__(f"GitHub API Error [{status_code}]: {message}")
         self.status_code = status_code
@@ -37,7 +39,7 @@ class GitHubClient:
     def _get_private_key(self) -> str:
         """Retrieves GitHub App private key from configuration or file."""
         if settings.GITHUB_PRIVATE_KEY:
-            return settings.GITHUB_PRIVATE_KEY
+            return settings.GITHUB_PRIVATE_KEY.replace("\\n", "\n")
 
         if settings.GITHUB_PRIVATE_KEY_PATH and os.path.exists(settings.GITHUB_PRIVATE_KEY_PATH):
             with open(settings.GITHUB_PRIVATE_KEY_PATH, encoding="utf-8") as f:
@@ -49,7 +51,9 @@ class GitHubClient:
         """Generates an RS256 JWT for GitHub App authentication (valid for 10 minutes)."""
         key_pem = self._get_private_key()
         if not key_pem or not settings.GITHUB_APP_ID:
-            raise UnauthorizedException("GitHub App credentials (APP_ID or Private Key) are not configured.")
+            raise UnauthorizedException(
+                "GitHub App credentials (APP_ID or Private Key) are not configured."
+            )
 
         now = int(time.time())
         payload = {
@@ -99,9 +103,13 @@ class GitHubClient:
             if response.status_code == 404:
                 raise NotFoundException("GitHub App installation not found or access was revoked.")
             elif response.status_code == 401 or response.status_code == 403:
-                raise UnauthorizedException("Failed to generate GitHub installation token. Check App permissions.")
+                raise UnauthorizedException(
+                    "Failed to generate GitHub installation token. Check App permissions."
+                )
             elif response.status_code != 201:
-                raise GitHubApiError(response.status_code, "Failed to obtain installation token from GitHub.")
+                raise GitHubApiError(
+                    response.status_code, "Failed to obtain installation token from GitHub."
+                )
 
             data = response.json()
             token = data["token"]
@@ -157,7 +165,9 @@ class GitHubClient:
                         raise GitHubRateLimitError()
 
                     if response.status_code == 401:
-                        raise UnauthorizedException("GitHub authentication failed. Please re-authenticate.")
+                        raise UnauthorizedException(
+                            "GitHub authentication failed. Please re-authenticate."
+                        )
                     elif response.status_code == 404:
                         raise NotFoundException("GitHub resource not found.")
                     elif response.status_code >= 400:
