@@ -36,6 +36,40 @@ async def test_github_callback_invalid_state_redirects_error(client: AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_github_callback_mismatched_installation_id_rejected(
+    client: AsyncClient,
+    test_user: User,
+    auth_headers: dict[str, str],
+):
+    state = GitHubAuthService.generate_state(test_user.id)
+
+    mock_profile = {
+        "id": 88881234,
+        "login": "octocat-dev",
+        "avatar_url": "https://avatars.githubusercontent.com/u/88881234",
+    }
+
+    with patch("app.services.github.auth.GitHubAuthService.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange, \
+         patch("app.services.github.client.github_client.get_user_profile", new_callable=AsyncMock) as mock_get_profile, \
+         patch("app.services.github.client.github_client.get_user_installations", new_callable=AsyncMock) as mock_get_inst, \
+         patch("app.services.github.client.github_client.get_installation", new_callable=AsyncMock) as mock_get_installation:
+
+        mock_exchange.return_value = "ghu_mock_user_token"
+        mock_get_profile.return_value = mock_profile
+        mock_get_inst.return_value = [{"id": 111111}]  # User owns 111111
+        # Query specifies unowned installation 999999
+        mock_get_installation.return_value = {"id": 999999, "account": {"id": 99999999, "login": "attacker"}}
+
+        response = await client.get(
+            f"/api/v1/github/callback?code=valid_code&state={state}&installation_id=999999",
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert "error=" in response.headers["location"]
+
+
+@pytest.mark.asyncio
 async def test_github_callback_success_connects_user(
     client: AsyncClient,
     test_user: User,

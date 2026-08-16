@@ -3,7 +3,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from app.core.config import settings
@@ -47,8 +47,6 @@ def do_run_migrations(connection: Connection) -> None:
     with context.begin_transaction():
         context.run_migrations()
 
-
-from sqlalchemy.ext.asyncio import create_async_engine
 
 async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine

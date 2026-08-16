@@ -231,5 +231,21 @@ class GitHubClient:
         )
         return response.json()
 
+    async def get_installation(self, installation_id: int) -> dict[str, Any]:
+        """Fetches installation metadata via GitHub App JWT."""
+        app_jwt = self.generate_app_jwt()
+        headers = {
+            "Authorization": f"Bearer {app_jwt}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        async with httpx.AsyncClient(base_url=self.BASE_URL, timeout=15.0) as client:
+            response = await client.get(f"/app/installations/{installation_id}", headers=headers)
+            if response.status_code == 404:
+                raise NotFoundException("GitHub App installation not found.")
+            elif response.status_code >= 400:
+                raise GitHubApiError(response.status_code, "Failed to fetch installation details.")
+            return response.json()
+
 
 github_client = GitHubClient()

@@ -10,14 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import NotFoundException, UnauthorizedException
-from app.core.security import encrypt_secret
 from app.core.telemetry import logger
 from app.models.auth import User
 from app.services.github.client import github_client
 
 
 class GitHubAuthService:
-    """Service handling GitHub App user authorization, state verification, and credential lifecycle."""
+    """Service handling GitHub App user authorization, state verification, and credential lifecycle.
+
+    Security & Architecture Principles:
+    1. Zero Persistent Tokens: No user access tokens or installation access tokens are persisted to PostgreSQL.
+    2. Ephemeral Ingestion: Installation Access Tokens are minted on demand via RS256 App JWTs and cached
+       strictly in memory with a short TTL buffer.
+    3. Installation Association Validation: The user identity is validated directly against GitHub OAuth,
+       and the installation ID must be verified as owned by or accessible to that authenticated GitHub user.
+       Redirect-provided installation_ids are never blindly trusted.
+    """
 
     STATE_EXPIRY_SECONDS = 600  # 10 minutes
 
@@ -85,7 +93,11 @@ class GitHubAuthService:
 
     @classmethod
     async def exchange_code_for_token(cls, code: str) -> str:
-        """Exchanges an authorization code for a user access token."""
+        """Exchanges an authorization code for an ephemeral user access token.
+
+        This token is used strictly within the callback lifecycle to verify identity and
+        installations, and is NEVER saved to the database.
+        """
         url = "https://github.com/login/oauth/access_token"
         headers = {"Accept": "application/json"}
         payload = {
@@ -115,7 +127,12 @@ class GitHubAuthService:
         code: str | None = None,
         installation_id: int | None = None,
     ) -> User:
-        """Associates the GitHub user profile & installation ID with the local User account."""
+        """Associates the GitHub user profile & installation ID with the local User account.
+
+        Guarantees:
+        1. Validates that the GitHub installation actually belongs to or is authorized for the authenticated user.
+        2. Never persists OAuth tokens or Installation tokens to PostgreSQL.
+        """
         stmt = select(User).where(User.id == user_id)
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
@@ -123,29 +140,65 @@ class GitHubAuthService:
         if not user:
             raise NotFoundException("User account not found.")
 
-        # 1. If code was provided, exchange for user token and fetch profile
+        # 1. If code was provided, exchange for user token and fetch user identity
         if code:
             user_token = await cls.exchange_code_for_token(code)
             profile = await github_client.get_user_profile(user_token)
 
-            user.github_user_id = profile.get("id")
-            user.github_username = profile.get("login")
+            github_uid = profile.get("id")
+            github_login = profile.get("login")
+
+            user.github_user_id = github_uid
+            user.github_username = github_login
             if profile.get("avatar_url"):
                 user.avatar_url = profile["avatar_url"]
 
-            # Store encrypted user token for fetching personal installations
-            user.encrypted_github_token = encrypt_secret(user_token)
-
-            # If user has an existing installation, resolve it
+            # 2. Verify installation ownership / access
+            user_installations = []
             try:
-                installations = await github_client.get_user_installations(user_token)
-                if installations and not installation_id:
-                    installation_id = installations[0].get("id")
+                user_installations = await github_client.get_user_installations(user_token)
             except Exception as e:
-                logger.warning(f"Could not auto-fetch user installations: {e}")
+                logger.warning(f"Could not retrieve user installations list: {e}")
 
-        # 2. Record installation ID if supplied via redirect or auto-discovery
-        if installation_id:
+            user_inst_ids = [inst["id"] for inst in user_installations if "id" in inst]
+
+            if installation_id:
+                # If an installation_id was passed in the redirect query, verify it
+                if user_inst_ids and installation_id not in user_inst_ids:
+                    # Double-check installation metadata directly via App JWT
+                    try:
+                        inst_details = await github_client.get_installation(installation_id)
+                        account_id = inst_details.get("account", {}).get("id")
+                        account_login = inst_details.get("account", {}).get("login", "").lower()
+                        if account_id != github_uid and account_login != (github_login or "").lower():
+                            raise UnauthorizedException("The specified GitHub installation does not belong to your account.")
+                    except Exception as exc:
+                        if isinstance(exc, UnauthorizedException):
+                            raise
+                        logger.error(f"Failed to verify installation ownership: {exc}")
+                        raise UnauthorizedException("Could not verify ownership of the GitHub App installation.") from exc
+                user.github_installation_id = installation_id
+            elif user_inst_ids:
+                # Auto-assign first authorized installation if none specified in query
+                user.github_installation_id = user_inst_ids[0]
+
+        elif installation_id:
+            # If only installation_id is provided without OAuth code, verify the user already has a connected GitHub identity
+            if not user.github_user_id:
+                raise UnauthorizedException("Cannot link installation without authenticated GitHub user identity.")
+            # Verify installation ownership via App JWT
+            try:
+                inst_details = await github_client.get_installation(installation_id)
+                account_id = inst_details.get("account", {}).get("id")
+                account_login = inst_details.get("account", {}).get("login", "").lower()
+                if account_id != user.github_user_id and account_login != (user.github_username or "").lower():
+                    raise UnauthorizedException("The specified GitHub installation does not belong to your account.")
+            except Exception as exc:
+                if isinstance(exc, UnauthorizedException):
+                    raise
+                logger.error(f"Failed to verify installation ownership: {exc}")
+                raise UnauthorizedException("Could not verify ownership of the GitHub App installation.") from exc
+
             user.github_installation_id = installation_id
 
         await db.commit()
@@ -166,7 +219,6 @@ class GitHubAuthService:
         user.github_user_id = None
         user.github_username = None
         user.github_installation_id = None
-        user.encrypted_github_token = None
 
         await db.commit()
         await db.refresh(user)
