@@ -64,14 +64,15 @@ Phase 1 is intentionally focused on the **Foundational Platform** (monorepo, bac
 
 ### Phase 2 — GitHub Integration
 * **Backend**:
-  - GitHub OAuth flow with state verification.
-  - Encrypted GitHub token storage via AES-256-GCM.
-  - GitHub API Client: Fetch user repositories (public & private), branches, commit history, and tree structure.
-  - Repository linking to Projects with branch selection.
+  - GitHub App integration architecture (User-to-Server authorization and Server-to-Server installation tokens).
+  - Fine-grained read-only permissions: `Contents: Read`, `Metadata: Read` (strictly zero write permissions).
+  - CSRF state verification and AES-256-GCM encrypted token storage.
+  - GitHub API Client: Fetch granted repositories (with pagination), inspect branches, default branch, and commit SHAs.
+  - Project creation from selected repository & branch (Repository status = `pending` / `ready for indexing`).
 * **Frontend**:
-  - GitHub connect button & OAuth callback handler.
-  - Project creation wizard: select org, choose GitHub repo, pick branch.
-  - Repository dashboard: repository cards, sync status, branch dropdown, file explorer tree.
+  - GitHub connection status in Settings (Connect/Disconnect, avatar, granted permissions badge).
+  - Project creation wizard: select org, select authorized repository, pick branch, create project.
+  - Repository dashboard: repository cards, sync status (`Ready to Index`), branch details, GitHub link.
 
 ---
 

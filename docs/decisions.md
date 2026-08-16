@@ -224,3 +224,62 @@ We will use:
 ### Consequences
 - **Positive**: Clean, fast, developer-grade UI.
 - **Negative**: Monaco Editor requires dynamic imports to avoid SSR hydration issues.
+
+---
+
+## ADR-012: GitHub App Architecture for Granular, Read-Only Repository Authorization
+
+### Status
+Accepted
+
+### Context
+Forge AI requires access to user and organization repositories to discover repositories, inspect branches, and ingest codebase contents for semantic indexing. 
+
+Traditional **OAuth Apps** use coarse scopes (e.g. `repo`). Under GitHub's authorization model, the OAuth `repo` scope grants blanket read **and write** access across all public and private repositories accessible to the user. There is no read-only scope in OAuth Apps for private repository code. Furthermore, OAuth Apps cannot be restricted by the user to specific repositories upon authorization.
+
+In contrast, **GitHub Apps** provide fine-grained permissions, per-installation repository scoping, short-lived tokens, and organization-level security management.
+
+### Decision
+We will use a **GitHub App** as Forge AI's primary integration and authorization mechanism.
+
+#### 1. Selected Permissions Model (Strict Least Privilege)
+Forge AI will request only the following read-only permissions:
+* **Repository Permissions**:
+  * `Contents: Read` — Allows reading repository files, directories, branches, commits, trees, and downloading archive blobs for indexing. (Does NOT allow pushing commits, modifying files, creating branches, or deleting code).
+  * `Metadata: Read` — Mandatory base permission required by GitHub to read basic repository metadata (repository name, owner, stars, visibility, default branch).
+* **User / Account Permissions**:
+  * `User Authorization (OAuth Web Flow)` — Identifies the authenticated GitHub user (`login`, `id`, `avatar_url`).
+
+#### 2. Permissions Explicitly Excluded
+The following permissions are strictly **NOT requested** in Phase 2 or Phase 3:
+* $\times$ `Contents: Write` (No code writing or branch pushes).
+* $\times$ `Pull Requests: Read/Write` (Deferred until Phase 6 PR Review workflows).
+* $\times$ `Issues: Read/Write` (Not needed for repository ingestion).
+* $\times$ `Workflows: Read/Write` (No CI/CD pipeline modification).
+* $\times$ `Administration: Read/Write` (No repository settings modification).
+* $\times$ `Webhooks: Read/Write` (Phase 2 uses on-demand API polling).
+
+#### 3. Repository Scoping & Installation Model
+During GitHub App installation, the user or organization administrator explicitly chooses whether to grant access to:
+* **All repositories**, OR
+* **Only select repositories** (e.g. granting Forge AI access to only `project-alpha`).
+
+Forge AI can only discover and access repositories that were explicitly selected and granted by the user.
+
+#### 4. Token Architecture & Lifecycle
+* **User-to-Server Token**: Obtained via the GitHub App User Authorization flow. Used to identify the authenticated user and list their app installations.
+* **Installation Access Token (Server-to-Server)**: Generated on demand using the GitHub App's private key (RS256 JWT) for a specific `installation_id`.
+  * **Short-Lived Lifetime**: Automatically expires in **1 hour** (enforced by GitHub).
+  * **Scoped Access**: Scoped exclusively to the repositories granted to that installation.
+  * **Storage & Encryption**: Stored tokens and private keys are encrypted at rest using AES-256-GCM and never exposed to the frontend or included in application logs.
+* **Revocation**: If a user uninstalls the GitHub App or removes a repository from the installation in their GitHub Settings, all future token generation requests immediately fail.
+
+### Consequences
+- **Positive**:
+  - True read-only access to private code without requesting dangerous write permissions.
+  - Granular repository selection gives users full control over which repositories Forge AI can access.
+  - Short-lived installation tokens (1 hour TTL) minimize blast radius if a session is compromised.
+  - Organization-friendly: Supports GitHub Enterprise Cloud SAML SSO and organization approval policies.
+  - Clean upgrade path: When Phase 6 introduces automated PR reviews, we can request `Pull Requests: Write` as an isolated, explicit permission upgrade.
+- **Negative**:
+  - Requires managing a GitHub App Private Key (`.pem`) for generating installation JWTs alongside Client ID / Client Secret.
