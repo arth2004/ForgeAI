@@ -1,7 +1,9 @@
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -11,7 +13,7 @@ from app.core.config import settings
 from app.core.telemetry import logger
 
 # Build engine arguments dynamically based on database dialect
-engine_kwargs = {
+engine_kwargs: dict[str, Any] = {
     "echo": False,
     "future": True,
 }
@@ -24,7 +26,7 @@ if not settings.DATABASE_URL.startswith("sqlite"):
     })
 
 # Create SQLAlchemy Async Engine
-engine = create_async_engine(
+engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     **engine_kwargs,
 )
@@ -61,3 +63,11 @@ async def check_database_connection() -> bool:
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
         return False
+
+
+async def close_database_connection() -> None:
+    """Closes the SQLAlchemy database engine connection pool."""
+    try:
+        await engine.dispose()
+    except Exception as e:
+        logger.error(f"Error disposing database engine: {e}")

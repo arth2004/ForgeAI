@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,12 +28,20 @@ class Settings(BaseSettings):
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    def assemble_cors_origins(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    parsed = json.loads(v_str)
+                    if isinstance(parsed, list):
+                        return [str(i).strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    pass
+            return [i.strip() for i in v_str.split(",") if i.strip()]
+        elif isinstance(v, (list, set, tuple)):
+            return [str(i).strip() for i in v if str(i).strip()]
+        raise ValueError(f"Invalid CORS origin format: {v}")
 
     # PostgreSQL Database
     DATABASE_URL: str = Field(

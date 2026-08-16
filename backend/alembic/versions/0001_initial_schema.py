@@ -5,17 +5,18 @@ Revises:
 Create Date: 2026-08-16 12:00:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
 revision: str = '0001_initial_schema'
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -51,8 +52,6 @@ def upgrade() -> None:
     op.create_index('ix_organizations_slug', 'organizations', ['slug'], unique=True)
 
     # 4. Memberships Table
-    membership_role = postgresql.ENUM('owner', 'admin', 'member', name='membership_role_enum', create_type=False)
-
     op.create_table(
         'memberships',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
