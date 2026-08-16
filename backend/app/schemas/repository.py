@@ -8,7 +8,9 @@ from app.models.project import IndexingStatus
 
 class RepositoryCreate(BaseModel):
     project_id: uuid.UUID
-    full_name: str = Field(..., min_length=3, max_length=255, json_schema_extra={"example": "facebook/react"})
+    full_name: str = Field(
+        ..., min_length=3, max_length=255, json_schema_extra={"example": "facebook/react"}
+    )
     default_branch: str = Field(default="main")
     is_private: bool = Field(default=False)
     github_repo_id: int | None = None
@@ -44,5 +46,6 @@ class RepositoryResponse(BaseModel):
     description: str | None = None
     language: str | None = None
     indexing_status: IndexingStatus
+    branches: list[RepositoryBranchResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

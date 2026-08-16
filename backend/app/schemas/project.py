@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.repository import RepositoryResponse
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
@@ -20,5 +22,6 @@ class ProjectResponse(BaseModel):
     name: str
     description: str | None = None
     settings: dict[str, Any] | None = None
+    repositories: list[RepositoryResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

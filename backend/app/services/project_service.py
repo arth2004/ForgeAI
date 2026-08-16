@@ -2,10 +2,11 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ForbiddenException
 from app.models.auth import Membership
-from app.models.project import Project
+from app.models.project import Project, Repository
 from app.schemas.project import ProjectCreate
 
 
@@ -24,12 +25,21 @@ class ProjectService:
         if not await self._verify_org_access(user_id, org_id):
             raise ForbiddenException("You do not have access to this organization.")
 
-        stmt = select(Project).where(Project.organization_id == org_id).order_by(Project.created_at.desc())
+        stmt = (
+            select(Project)
+            .options(selectinload(Project.repositories).selectinload(Repository.branches))
+            .where(Project.organization_id == org_id)
+            .order_by(Project.created_at.desc())
+        )
         res = await self.db.execute(stmt)
         return list(res.scalars().all())
 
     async def get_by_id(self, user_id: uuid.UUID, project_id: uuid.UUID) -> Project | None:
-        stmt = select(Project).where(Project.id == project_id)
+        stmt = (
+            select(Project)
+            .options(selectinload(Project.repositories).selectinload(Repository.branches))
+            .where(Project.id == project_id)
+        )
         res = await self.db.execute(stmt)
         project = res.scalar_one_or_none()
         if not project:
@@ -40,7 +50,9 @@ class ProjectService:
 
     async def create(self, user_id: uuid.UUID, data: ProjectCreate) -> Project:
         if not await self._verify_org_access(user_id, data.organization_id):
-            raise ForbiddenException("You do not have permission to create projects in this organization.")
+            raise ForbiddenException(
+                "You do not have permission to create projects in this organization."
+            )
 
         project = Project(
             organization_id=data.organization_id,
