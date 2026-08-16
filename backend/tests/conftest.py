@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 # Set test environment before imports
 os.environ["ENVIRONMENT"] = "test"
@@ -12,6 +13,7 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/1"
 os.environ["JWT_SECRET"] = "test-secret-key-that-is-at-least-32-chars-long-forgeai"
 os.environ["ENCRYPTION_KEY"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+import app.core.database
 import app.models  # noqa: F401
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password
@@ -19,9 +21,11 @@ from app.main import app as fastapi_app
 from app.models.auth import User
 from app.models.base import Base
 
-# In-memory SQLite async engine for tests
+# Shared in-memory SQLite async engine with StaticPool so all connections and threads share the same database
 test_engine = create_async_engine(
-    "sqlite+aiosqlite:///:memory:",
+    "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true",
+    connect_args={"check_same_thread": False, "uri": True},
+    poolclass=StaticPool,
     echo=False,
     future=True,
 )
@@ -33,6 +37,9 @@ TestingSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
+# Patch global AsyncSessionLocal in app.core.database to use the shared test engine
+app.core.database.AsyncSessionLocal = TestingSessionLocal
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -51,6 +58,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create test HTTP client overriding get_db dependency."""
+
     async def override_get_db():
         yield db_session
 

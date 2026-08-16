@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.auth import User
-from app.models.project import RepositoryBranch
+from app.models.project import Repository, RepositoryBranch
 from app.schemas.github import (
     CreateProjectFromGitHubRequest,
     GitHubAuthUrlResponse,
@@ -222,13 +223,18 @@ async def create_project_from_github_repository(
         await db.flush()
 
     await db.commit()
-    await db.refresh(project)
-    await db.refresh(repo)
+    project_full = await project_svc.get_by_id(user_id=current_user.id, project_id=project.id)
+    repo_stmt = (
+        select(Repository)
+        .options(selectinload(Repository.branches))
+        .where(Repository.id == repo.id)
+    )
+    repo_full = (await db.execute(repo_stmt)).scalar_one()
     await db.refresh(branch)
 
     return GitHubProjectCreationResponse(
-        project=ProjectResponse.model_validate(project),
-        repository=RepositoryResponse.model_validate(repo),
+        project=ProjectResponse.model_validate(project_full),
+        repository=RepositoryResponse.model_validate(repo_full),
         selected_branch=RepositoryBranchResponse.model_validate(branch),
         status="pending",
         message="Repository successfully connected to project. Ready for indexing.",

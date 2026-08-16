@@ -5,7 +5,13 @@ from fastapi import status
 
 class ForgeAIException(Exception):
     """Base exception for Forge AI domain errors."""
-    def __init__(self, message: str, status_code: int = status.HTTP_400_BAD_REQUEST, details: dict[str, Any] | None = None):
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = status.HTTP_400_BAD_REQUEST,
+        details: dict[str, Any] | None = None,
+    ):
         self.message = message
         self.status_code = status_code
         self.details = details or {}
@@ -46,4 +52,19 @@ class ConflictException(ForgeAIException):
         super().__init__(
             message=message,
             status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class EmbeddingQuotaExhaustedException(ForgeAIException):
+    """Raised when an embedding provider quota (e.g. daily/project limit) is exhausted."""
+
+    def __init__(
+        self,
+        message: str = "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased.",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            details=details or {},
         )

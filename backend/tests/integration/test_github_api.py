@@ -8,7 +8,9 @@ from app.services.github.auth import GitHubAuthService
 
 
 @pytest.mark.asyncio
-async def test_github_status_disconnected(client: AsyncClient, test_user: User, auth_headers: dict[str, str]):
+async def test_github_status_disconnected(
+    client: AsyncClient, test_user: User, auth_headers: dict[str, str]
+):
     response = await client.get("/api/v1/github/status", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
@@ -17,7 +19,9 @@ async def test_github_status_disconnected(client: AsyncClient, test_user: User, 
 
 
 @pytest.mark.asyncio
-async def test_get_github_authorize_url(client: AsyncClient, test_user: User, auth_headers: dict[str, str]):
+async def test_get_github_authorize_url(
+    client: AsyncClient, test_user: User, auth_headers: dict[str, str]
+):
     response = await client.get("/api/v1/github/authorize", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
@@ -49,16 +53,30 @@ async def test_github_callback_mismatched_installation_id_rejected(
         "avatar_url": "https://avatars.githubusercontent.com/u/88881234",
     }
 
-    with patch("app.services.github.auth.GitHubAuthService.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange, \
-         patch("app.services.github.client.github_client.get_user_profile", new_callable=AsyncMock) as mock_get_profile, \
-         patch("app.services.github.client.github_client.get_user_installations", new_callable=AsyncMock) as mock_get_inst, \
-         patch("app.services.github.client.github_client.get_installation", new_callable=AsyncMock) as mock_get_installation:
-
+    with (
+        patch(
+            "app.services.github.auth.GitHubAuthService.exchange_code_for_token",
+            new_callable=AsyncMock,
+        ) as mock_exchange,
+        patch(
+            "app.services.github.client.github_client.get_user_profile", new_callable=AsyncMock
+        ) as mock_get_profile,
+        patch(
+            "app.services.github.client.github_client.get_user_installations",
+            new_callable=AsyncMock,
+        ) as mock_get_inst,
+        patch(
+            "app.services.github.client.github_client.get_installation", new_callable=AsyncMock
+        ) as mock_get_installation,
+    ):
         mock_exchange.return_value = "ghu_mock_user_token"
         mock_get_profile.return_value = mock_profile
         mock_get_inst.return_value = [{"id": 111111}]  # User owns 111111
         # Query specifies unowned installation 999999
-        mock_get_installation.return_value = {"id": 999999, "account": {"id": 99999999, "login": "attacker"}}
+        mock_get_installation.return_value = {
+            "id": 999999,
+            "account": {"id": 99999999, "login": "attacker"},
+        }
 
         response = await client.get(
             f"/api/v1/github/callback?code=valid_code&state={state}&installation_id=999999",
@@ -83,10 +101,19 @@ async def test_github_callback_success_connects_user(
         "avatar_url": "https://avatars.githubusercontent.com/u/88881234",
     }
 
-    with patch("app.services.github.auth.GitHubAuthService.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange, \
-         patch("app.services.github.client.github_client.get_user_profile", new_callable=AsyncMock) as mock_get_profile, \
-         patch("app.services.github.client.github_client.get_user_installations", new_callable=AsyncMock) as mock_get_inst:
-
+    with (
+        patch(
+            "app.services.github.auth.GitHubAuthService.exchange_code_for_token",
+            new_callable=AsyncMock,
+        ) as mock_exchange,
+        patch(
+            "app.services.github.client.github_client.get_user_profile", new_callable=AsyncMock
+        ) as mock_get_profile,
+        patch(
+            "app.services.github.client.github_client.get_user_installations",
+            new_callable=AsyncMock,
+        ) as mock_get_inst,
+    ):
         mock_exchange.return_value = "ghu_mock_user_token"
         mock_get_profile.return_value = mock_profile
         mock_get_inst.return_value = [{"id": 554433}]
@@ -136,7 +163,10 @@ async def test_list_github_repositories(
         ],
     }
 
-    with patch("app.services.github.client.github_client.list_installation_repositories", new_callable=AsyncMock) as mock_list:
+    with patch(
+        "app.services.github.client.github_client.list_installation_repositories",
+        new_callable=AsyncMock,
+    ) as mock_list:
         mock_list.return_value = mock_repos_payload
 
         response = await client.get("/api/v1/github/repositories", headers=auth_headers)
@@ -163,7 +193,9 @@ async def test_list_github_branches(
         {"name": "feature/ai-agent", "commit": {"sha": "fedcba0987654321"}, "protected": False},
     ]
 
-    with patch("app.services.github.client.github_client.list_repository_branches", new_callable=AsyncMock) as mock_branches:
+    with patch(
+        "app.services.github.client.github_client.list_repository_branches", new_callable=AsyncMock
+    ) as mock_branches:
         mock_branches.return_value = mock_branches_payload
 
         response = await client.get(
@@ -185,7 +217,9 @@ async def test_create_project_from_github_repository(
     auth_headers: dict[str, str],
 ):
     # 1. Create Organization
-    org_resp = await client.post("/api/v1/organizations", json={"name": "Engineering Org"}, headers=auth_headers)
+    org_resp = await client.post(
+        "/api/v1/organizations", json={"name": "Engineering Org"}, headers=auth_headers
+    )
     assert org_resp.status_code == 201
     org_id = org_resp.json()["id"]
 

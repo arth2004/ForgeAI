@@ -5,6 +5,7 @@ Revises: 0001_initial_schema
 Create Date: 2026-08-16 18:50:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -25,7 +26,9 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("github_installation_id", sa.BigInteger(), nullable=True))
     op.create_index("ix_users_github_user_id", "users", ["github_user_id"], unique=False)
     op.create_index("ix_users_github_username", "users", ["github_username"], unique=False)
-    op.create_index("ix_users_github_installation_id", "users", ["github_installation_id"], unique=False)
+    op.create_index(
+        "ix_users_github_installation_id", "users", ["github_installation_id"], unique=False
+    )
 
     # 2. Add repository metadata fields to repositories table
     op.add_column("repositories", sa.Column("owner", sa.String(length=255), nullable=True))
@@ -34,7 +37,10 @@ def upgrade() -> None:
     op.add_column("repositories", sa.Column("language", sa.String(length=100), nullable=True))
 
     # 3. Add branch metadata fields to repository_branches table
-    op.add_column("repository_branches", sa.Column("is_protected", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+    op.add_column(
+        "repository_branches",
+        sa.Column("is_protected", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    )
 
 
 def downgrade() -> None:

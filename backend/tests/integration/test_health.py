@@ -6,10 +6,11 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_health_endpoint_healthy(client: AsyncClient):
-    with patch("app.api.v1.health.check_database_connection", new_callable=AsyncMock) as mock_db, \
-         patch("app.api.v1.health.check_redis_connection", new_callable=AsyncMock) as mock_redis, \
-         patch("app.api.v1.health.get_arq_pool", new_callable=AsyncMock) as mock_arq:
-
+    with (
+        patch("app.api.v1.health.check_database_connection", new_callable=AsyncMock) as mock_db,
+        patch("app.api.v1.health.check_redis_connection", new_callable=AsyncMock) as mock_redis,
+        patch("app.api.v1.health.get_arq_pool", new_callable=AsyncMock) as mock_arq,
+    ):
         mock_db.return_value = True
         mock_redis.return_value = True
         mock_pool = AsyncMock()
@@ -27,10 +28,11 @@ async def test_health_endpoint_healthy(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_health_endpoint_degraded(client: AsyncClient):
-    with patch("app.api.v1.health.check_database_connection", new_callable=AsyncMock) as mock_db, \
-         patch("app.api.v1.health.check_redis_connection", new_callable=AsyncMock) as mock_redis, \
-         patch("app.api.v1.health.get_arq_pool", new_callable=AsyncMock) as mock_arq:
-
+    with (
+        patch("app.api.v1.health.check_database_connection", new_callable=AsyncMock) as mock_db,
+        patch("app.api.v1.health.check_redis_connection", new_callable=AsyncMock) as mock_redis,
+        patch("app.api.v1.health.get_arq_pool", new_callable=AsyncMock) as mock_arq,
+    ):
         mock_db.return_value = False
         mock_redis.return_value = True
         mock_pool = AsyncMock()

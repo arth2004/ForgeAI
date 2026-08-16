@@ -5,6 +5,7 @@ from arq.connections import RedisSettings
 from app.core.config import settings
 from app.core.telemetry import logger
 from app.workers.health_tasks import health_check_job
+from app.workers.ingestion_tasks import index_repository_task
 
 
 async def startup(ctx: dict[str, Any]):
@@ -20,10 +21,11 @@ class WorkerSettings:
     ARQ Worker configuration.
     Run via: python -m arq app.workers.main.WorkerSettings
     """
-    functions = [health_check_job]
+
+    functions = [health_check_job, index_repository_task]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = 10
-    job_timeout = 300
+    job_timeout = 600  # 10 minutes timeout for large repository ingestion
     keep_result = 3600  # Keep completed job results for 1 hour

@@ -24,7 +24,11 @@ async def list_repositories(
     return await service.list_for_project(current_user.id, project_id)
 
 
-@router.post("/projects/{project_id}/repositories", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/projects/{project_id}/repositories",
+    response_model=RepositoryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def connect_repository(
     project_id: uuid.UUID,
     data: RepositoryCreate,

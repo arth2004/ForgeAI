@@ -29,15 +29,21 @@ class GitHubBranchService:
         formatted_branches = []
         for branch in raw_branches:
             name = branch.get("name", "")
-            commit_sha = branch.get("commit", {}).get("sha") if isinstance(branch.get("commit"), dict) else None
+            commit_sha = (
+                branch.get("commit", {}).get("sha")
+                if isinstance(branch.get("commit"), dict)
+                else None
+            )
             is_protected = branch.get("protected", False)
 
-            formatted_branches.append({
-                "name": name,
-                "commit_sha": commit_sha,
-                "is_protected": is_protected,
-                "is_default": name == default_branch,
-            })
+            formatted_branches.append(
+                {
+                    "name": name,
+                    "commit_sha": commit_sha,
+                    "is_protected": is_protected,
+                    "is_default": name == default_branch,
+                }
+            )
 
         return formatted_branches
 

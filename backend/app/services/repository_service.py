@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictException, ForbiddenException
 from app.models.auth import Membership
@@ -29,6 +30,7 @@ class RepositoryService:
         await self._verify_project_access(user_id, project_id)
         stmt = (
             select(Repository)
+            .options(selectinload(Repository.branches))
             .where(Repository.project_id == project_id)
             .order_by(Repository.created_at.desc())
         )
@@ -36,7 +38,11 @@ class RepositoryService:
         return list(res.scalars().all())
 
     async def get_by_id(self, user_id: uuid.UUID, repo_id: uuid.UUID) -> Repository | None:
-        stmt = select(Repository).where(Repository.id == repo_id)
+        stmt = (
+            select(Repository)
+            .options(selectinload(Repository.branches))
+            .where(Repository.id == repo_id)
+        )
         res = await self.db.execute(stmt)
         repo = res.scalar_one_or_none()
         if not repo:
@@ -54,7 +60,9 @@ class RepositoryService:
         )
         existing = await self.db.execute(stmt)
         if existing.scalar_one_or_none():
-            raise ConflictException(f"Repository '{data.full_name}' is already connected to this project.")
+            raise ConflictException(
+                f"Repository '{data.full_name}' is already connected to this project."
+            )
 
         repo = Repository(
             project_id=data.project_id,
@@ -75,4 +83,10 @@ class RepositoryService:
         self.db.add(default_branch)
         await self.db.flush()
 
-        return repo
+        stmt = (
+            select(Repository)
+            .options(selectinload(Repository.branches))
+            .where(Repository.id == repo.id)
+        )
+        res = await self.db.execute(stmt)
+        return res.scalar_one()

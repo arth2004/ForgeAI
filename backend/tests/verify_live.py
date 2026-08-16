@@ -62,7 +62,9 @@ async def verify():
         assert repo_resp.status_code == 201
 
         # 7. ARQ Worker Job Pipeline Test
-        job_enqueue = await client.post("/api/v1/worker/test-job", json={"message": "Verification ping"})
+        job_enqueue = await client.post(
+            "/api/v1/worker/test-job", json={"message": "Verification ping"}
+        )
         print("7. Enqueue ARQ task:", job_enqueue.status_code, job_enqueue.json())
         assert job_enqueue.status_code == 202
         job_id = job_enqueue.json()["job_id"]
@@ -73,7 +75,7 @@ async def verify():
             job_status = await client.get(f"/api/v1/worker/test-job/{job_id}")
             data = job_status.json()
             if data["status"] in ["complete", "success"] or data.get("result"):
-                print(f"8. ARQ Worker Job Result (Attempt {attempt+1}):", data)
+                print(f"8. ARQ Worker Job Result (Attempt {attempt + 1}):", data)
                 assert data["result"]["status"] == "success"
                 assert data["result"]["worker_name"] == "ForgeAI-ARQ-Worker"
                 break

@@ -19,11 +19,13 @@ engine_kwargs: dict[str, Any] = {
 }
 
 if not settings.DATABASE_URL.startswith("sqlite"):
-    engine_kwargs.update({
-        "pool_pre_ping": True,
-        "pool_size": 10,
-        "max_overflow": 20,
-    })
+    engine_kwargs.update(
+        {
+            "pool_pre_ping": True,
+            "pool_size": 10,
+            "max_overflow": 20,
+        }
+    )
 
 # Create SQLAlchemy Async Engine
 engine: AsyncEngine = create_async_engine(

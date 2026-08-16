@@ -17,7 +17,9 @@ class GitHubRepositoryService:
     ) -> tuple[list[dict[str, Any]], int]:
         """Lists repositories granted to the user's GitHub App installation."""
         if not user.github_installation_id:
-            raise UnauthorizedException("GitHub App is not connected. Please connect your GitHub account in Settings.")
+            raise UnauthorizedException(
+                "GitHub App is not connected. Please connect your GitHub account in Settings."
+            )
 
         data = await github_client.list_installation_repositories(
             installation_id=user.github_installation_id,
@@ -30,18 +32,22 @@ class GitHubRepositoryService:
 
         formatted_repos = []
         for repo in raw_repos:
-            formatted_repos.append({
-                "github_repo_id": repo["id"],
-                "name": repo["name"],
-                "full_name": repo["full_name"],
-                "owner": repo["owner"]["login"] if "owner" in repo and "login" in repo["owner"] else None,
-                "is_private": repo.get("private", False),
-                "default_branch": repo.get("default_branch", "main"),
-                "html_url": repo.get("html_url"),
-                "description": repo.get("description"),
-                "language": repo.get("language"),
-                "updated_at": repo.get("updated_at"),
-            })
+            formatted_repos.append(
+                {
+                    "github_repo_id": repo["id"],
+                    "name": repo["name"],
+                    "full_name": repo["full_name"],
+                    "owner": repo["owner"]["login"]
+                    if "owner" in repo and "login" in repo["owner"]
+                    else None,
+                    "is_private": repo.get("private", False),
+                    "default_branch": repo.get("default_branch", "main"),
+                    "html_url": repo.get("html_url"),
+                    "description": repo.get("description"),
+                    "language": repo.get("language"),
+                    "updated_at": repo.get("updated_at"),
+                }
+            )
 
         return formatted_repos, total_count
 

@@ -5,6 +5,7 @@ Revises: 0002_github_integration
 Create Date: 2026-08-16 19:25:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa

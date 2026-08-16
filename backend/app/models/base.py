@@ -15,6 +15,7 @@ class Base(DeclarativeBase):
 
 class UUIDMixin:
     """Mixin for UUID primary key."""
+
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         primary_key=True,
@@ -25,6 +26,7 @@ class UUIDMixin:
 
 class TimestampMixin:
     """Mixin for creation and update timestamps."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,

@@ -62,4 +62,10 @@ class ProjectService:
         )
         self.db.add(project)
         await self.db.flush()
-        return project
+        stmt = (
+            select(Project)
+            .options(selectinload(Project.repositories).selectinload(Repository.branches))
+            .where(Project.id == project.id)
+        )
+        res = await self.db.execute(stmt)
+        return res.scalar_one()

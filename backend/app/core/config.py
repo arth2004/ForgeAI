@@ -90,6 +90,20 @@ class Settings(BaseSettings):
     GITHUB_PRIVATE_KEY_PATH: str = Field(default="")
     GITHUB_REDIRECT_URI: str = Field(default="http://localhost:8000/api/v1/github/callback")
 
+    # Phase 3 Embedding & Indexing Settings
+    EMBEDDING_PROVIDER: str = Field(default="google")
+    GEMINI_API_KEY: str = Field(default="")
+    GEMINI_EMBEDDING_MODEL: str = Field(default="gemini-embedding-2")
+    GEMINI_EMBEDDING_DIMENSION: int = Field(default=768)
+
+    OPENAI_API_KEY: str = Field(default="")
+    OPENAI_EMBEDDING_MODEL: str = Field(default="text-embedding-3-small")
+
+    # Ingestion & Repository Limits (Configurable)
+    MAX_FILE_SIZE_BYTES: int = Field(default=1_048_576)  # 1 MB
+    MAX_REPO_SIZE_BYTES: int = Field(default=524_288_000)  # 500 MB
+    MAX_CHUNKS_PER_EMBED_BATCH: int = Field(default=100)
+
     # Frontend URL
     FRONTEND_URL: str = Field(default="http://localhost:3000")
 

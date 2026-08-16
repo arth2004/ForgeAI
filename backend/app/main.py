@@ -13,7 +13,9 @@ from app.core.telemetry import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Starting {settings.PROJECT_NAME} backend v{settings.VERSION} [{settings.ENVIRONMENT}]")
+    logger.info(
+        f"Starting {settings.PROJECT_NAME} backend v{settings.VERSION} [{settings.ENVIRONMENT}]"
+    )
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME} backend...")
     await close_redis()
