@@ -78,19 +78,22 @@ Phase 1 is intentionally focused on the **Foundational Platform** (monorepo, bac
 
 ### Phase 3 — Repository Intelligence & Ingestion
 * **Ingestion Engine**:
-  - File filtering engine (`.gitignore`, binaries, size limits, lockfiles, generated assets).
+  - Streaming tarball reader (incremental stream processing without full RAM buffering).
+  - Configurable file and repository size caps (`MAX_FILE_SIZE_BYTES`, `MAX_REPO_SIZE_BYTES`) with `.gitignore`, binary, lockfile, and vendor filtering.
   - Tree-sitter AST parser supporting TypeScript, JavaScript, Python, Markdown, JSON, YAML.
-  - Symbol & Scope extraction (functions, classes, interfaces, methods).
-  - Chunking strategy: AST node-bounded chunks with context header injection (`// File: ... | Class: ... | Method: ...`).
+  - Symbol & scope extraction (functions, classes, interfaces, methods, imports).
+  - Semantic chunking: AST node-bounded chunks with context header injection (`// File: ... | Class: ... | Method: ...`) and block sliding window for oversized functions.
 * **Embedding & Storage**:
-  - `EmbeddingProvider` abstraction supporting Google Gemini and OpenAI embeddings.
-  - `chunk_embeddings` multi-version schema with HNSW index for cosine distance.
-  - Full-text search `tsvector` generation and GIN index.
-  - `code_dependencies` table schema for future dependency traversal.
+  - `EmbeddingProvider` abstraction with primary default Google `gemini-embedding-2` (768d vector space).
+  - `repository_index_versions` atomic version promotion lifecycle (`BUILDING` -> `VALIDATED` -> `ACTIVE`).
+  - `chunk_embeddings` with HNSW vector index (cosine distance, `m=16, ef_construction=64`).
+  - Full-text search `tsvector` generation with weighted GIN index.
+  - `code_dependencies` import graph tracking.
 * **Worker & Incremental Sync**:
-  - ARQ async ingestion workers (`ingestion` and `embeddings` queues).
-  - Incremental sync engine: SHA-256 hash comparison against existing database records.
-  - Hybrid Search Engine combining dense vector similarity + sparse tsvector ranking via Reciprocal Rank Fusion (RRF).
+  - ARQ background tasks passing lightweight IDs (`job_id`, `index_version_id`, `chunk_ids_batch`) with short DB transactions and out-of-transaction embedding batches.
+  - Incremental sync engine: SHA-256 hash comparison against existing index records.
+  - 3-Stage Hybrid Retrieval combining dense vector similarity + sparse tsvector ranking + exact symbol matching via Reciprocal Rank Fusion (RRF).
+  - Evaluation harness measuring Recall@5, Recall@10, MRR, Citation Accuracy, Branch Isolation, and Latency.
 
 ---
 

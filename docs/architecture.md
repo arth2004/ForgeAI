@@ -20,7 +20,7 @@ flowchart TB
     end
 
     subgraph Gateway ["API Gateway & Ingress"]
-        FastAPI["FastAPI Backend (Async Python 3.11+)"]
+        FastAPI["FastAPI Backend (Async Python 3.12+)"]
         AuthMiddleware["OAuth & Session Auth Middleware"]
         RateLimiter["Rate Limiting & Request Context"]
     end
@@ -35,8 +35,8 @@ flowchart TB
         QueueIngestion["Queue: ingestion"]
         QueueEmbeddings["Queue: embeddings"]
         QueueAnalysis["Queue: analysis"]
-        IngestionEngine["Tree-Sitter AST Parser & Chunking Engine"]
-        EmbeddingPipeline["Embedding Provider Pipeline"]
+        IngestionEngine["Streaming Tarball & Tree-Sitter AST Engine"]
+        EmbeddingPipeline["Embedding Provider Pipeline (gemini-embedding-2)"]
     end
 
     subgraph AgenticLayer ["AI & Agentic Orchestration (LangGraph)"]
@@ -47,7 +47,7 @@ flowchart TB
 
     subgraph ExternalProviders ["External Services & LLM Gateway"]
         LLMGateway["Model & Embedding Gateway (Gemini, OpenAI, Anthropic)"]
-        GitHubAPI["GitHub REST & GraphQL API"]
+        GitHubAPI["GitHub REST & App Installations"]
     end
 
     UI <--> FastAPI
@@ -55,7 +55,7 @@ flowchart TB
     FastAPI --> AuthMiddleware --> RateLimiter
     FastAPI <--> Postgres
     FastAPI <--> RedisCache
-    FastAPI -->|Enqueue Job| RedisCache
+    FastAPI -->|Enqueue Job IDs| RedisCache
     RedisCache --> QueueIngestion & QueueEmbeddings & QueueAnalysis
     QueueIngestion & QueueEmbeddings & QueueAnalysis --> ARQ
     ARQ --> IngestionEngine --> EmbeddingPipeline --> Postgres
@@ -71,8 +71,6 @@ flowchart TB
 ---
 
 ## 3. Monorepo Repository Structure
-
-A clean, modular monorepo structure separating concerns with strict domain boundaries:
 
 ```text
 ForgeAi/
@@ -93,16 +91,17 @@ ForgeAi/
 │   │   │   ├── (auth)/           # Login, GitHub callback
 │   │   │   ├── (dashboard)/      # Projects, Settings, Organizations
 │   │   │   └── (workspace)/[projectId]/
-│   │   │       ├── chat/         # Project-aware AI chat
-│   │   │       ├── code-review/  # PR review (Future Phase)
-│   │   │       ├── docs/         # Generated docs (Future Phase)
-│   │   │       ├── architecture/ # Architecture explorer (Future Phase)
-│   │   │       ├── api-explorer/ # API catalog (Future Phase)
+│   │   │       ├── chat/         # Project-aware AI chat (Phase 4)
+│   │   │       ├── code-review/  # PR review (Phase 6)
+│   │   │       ├── docs/         # Generated docs (Phase 5)
+│   │   │       ├── architecture/ # Architecture explorer (Phase 6)
+│   │   │       ├── api-explorer/ # API catalog (Phase 6)
 │   │   │       └── settings/     # Ingestion & index management
 │   │   ├── components/           # Atomic & domain components
 │   │   │   ├── ui/               # shadcn/ui primitives
 │   │   │   ├── chat/             # Streaming markdown, citations, safe status badges
 │   │   │   ├── code/             # Monaco code & diff viewer
+│   │   │   ├── projects/         # GitHub import wizard & index status
 │   │   │   └── layout/           # App shell, sidebar, header
 │   │   ├── hooks/                # Custom React hooks (streaming, queries)
 │   │   ├── lib/                  # Utilities, API client, auth helpers
@@ -115,6 +114,7 @@ ForgeAi/
 │   │   ├── api/                  # REST and WebSocket endpoints
 │   │   │   ├── v1/
 │   │   │   │   ├── auth.py
+│   │   │   │   ├── github.py
 │   │   │   │   ├── organizations.py
 │   │   │   │   ├── projects.py
 │   │   │   │   ├── repositories.py
@@ -134,21 +134,18 @@ ForgeAi/
 │   │   │   ├── base.py
 │   │   │   ├── auth.py           # User, Organization, Membership
 │   │   │   ├── project.py        # Project, Repository, RepositoryBranch
-│   │   │   ├── codebase.py       # RepositoryFile, CodeChunk, ChunkEmbedding, CodeDependency
-│   │   │   ├── chat.py           # Conversation, Message, Citation
+│   │   │   ├── codebase.py       # RepositoryIndexVersion, RepositoryFile, CodeChunk, ChunkEmbedding, CodeDependency
+│   │   │   ├── chat.py           # Conversation, Message, Citation (Phase 4)
 │   │   │   └── evaluation.py     # EvalDataset, EvalRun, MetricResult
 │   │   ├── schemas/              # Pydantic validation & serialization models
 │   │   ├── services/             # Core business logic
 │   │   │   ├── github/           # GitHub client & repository sync
 │   │   │   ├── parser/           # Tree-sitter AST parsing & chunking
-│   │   │   ├── embedding/        # EmbeddingProvider abstraction
+│   │   │   ├── embedding/        # EmbeddingProvider abstraction (gemini-embedding-2)
 │   │   │   ├── retrieval/        # Hybrid search (pgvector + fulltext + RRF)
 │   │   │   ├── llm/              # LLMGateway provider abstraction
-│   │   │   └── evaluation/       # Lightweight evaluation harness
-│   │   ├── agents/               # LangGraph state graphs & workflows
-│   │   │   ├── state.py          # ProjectAssistantState schema
-│   │   │   ├── project_assistant.py # Core LangGraph Assistant
-│   │   │   └── tools/            # Retrieval and file lookup tools
+│   │   │   └── evaluation/       # Benchmark evaluation harness
+│   │   ├── agents/               # LangGraph state graphs & workflows (Phase 4+)
 │   │   └── workers/              # ARQ background worker functions
 │   │       ├── main.py           # ARQ worker entrypoint & queue definitions
 │   │       ├── ingestion_tasks.py
@@ -156,17 +153,15 @@ ForgeAi/
 │   │       └── analysis_tasks.py
 │   ├── alembic/                  # Database migrations
 │   ├── tests/                    # Unit and integration tests
-│   │   ├── unit/
-│   │   └── integration/
 │   ├── pyproject.toml
 │   └── Dockerfile
-├── docker-compose.yml            # Local orchestration (Postgres+pgvector, Redis, API, Worker)
+├── docker-compose.yml            # Local orchestration (Postgres 16 + pgvector, Redis, API, Worker, Next.js)
 └── README.md
 ```
 
 ---
 
-## 4. Database Schema (PostgreSQL + pgvector)
+## 4. Database Schema (PostgreSQL 16 + pgvector)
 
 All entities enforce multi-tenant isolation via `organization_id` or `project_id`.
 
@@ -176,7 +171,8 @@ erDiagram
     ORGANIZATIONS ||--o{ PROJECTS : "owns"
     PROJECTS ||--o{ REPOSITORIES : "contains"
     REPOSITORIES ||--o{ REPOSITORY_BRANCHES : "tracks"
-    REPOSITORIES ||--o{ REPOSITORY_FILES : "contains"
+    REPOSITORY_BRANCHES ||--o{ REPOSITORY_INDEX_VERSIONS : "indexes"
+    REPOSITORY_INDEX_VERSIONS ||--o{ REPOSITORY_FILES : "contains"
     REPOSITORY_FILES ||--o{ CODE_CHUNKS : "chunked_into"
     REPOSITORY_FILES ||--o{ CODE_DEPENDENCIES : "imports"
     CODE_CHUNKS ||--o{ CHUNK_EMBEDDINGS : "has_vectors"
@@ -193,70 +189,50 @@ erDiagram
    - `memberships`: `user_id`, `organization_id`, `role (enum: owner, admin, member)`.
 
 2. **`users`**:
-   - `id (UUID PK)`, `email (VARCHAR UNIQUE)`, `full_name (VARCHAR)`, `avatar_url (VARCHAR)`, `encrypted_github_token (TEXT)`, `created_at`.
+   - `id (UUID PK)`, `email (VARCHAR UNIQUE)`, `full_name (VARCHAR)`, `avatar_url (VARCHAR)`, `github_user_id (BIGINT)`, `github_username (VARCHAR)`, `github_installation_id (BIGINT)`, `is_active (BOOLEAN)`, `created_at`.
+   - *(Zero durable tokens in PostgreSQL; installation tokens are ephemeral and cached in memory).*
 
 3. **`projects`**:
    - `id (UUID PK)`, `organization_id (UUID FK)`, `name (VARCHAR)`, `description (TEXT)`, `settings (JSONB)`, `created_at`.
 
 4. **`repositories` & `repository_branches`**:
-   - `id (UUID PK)`, `project_id (UUID FK)`, `github_repo_id (BIGINT)`, `full_name (VARCHAR, e.g. 'org/repo')`, `default_branch (VARCHAR)`, `is_private (BOOLEAN)`, `indexing_status (enum: pending, indexing, ready, failed)`.
-   - `repository_branches`: `id (UUID PK)`, `repository_id (UUID FK)`, `name (VARCHAR)`, `latest_commit_sha (VARCHAR(40))`, `indexed_at (TIMESTAMP)`.
+   - `repositories`: `id (UUID PK)`, `project_id (UUID FK)`, `github_repo_id (BIGINT)`, `owner (VARCHAR)`, `full_name (VARCHAR)`, `default_branch (VARCHAR)`, `is_private (BOOLEAN)`, `html_url (VARCHAR)`, `description (TEXT)`, `language (VARCHAR)`, `indexing_status (enum: pending, indexing, ready, failed)`.
+   - `repository_branches`: `id (UUID PK)`, `repository_id (UUID FK)`, `name (VARCHAR)`, `latest_commit_sha (VARCHAR(40))`, `is_protected (BOOLEAN)`, `indexed_at (TIMESTAMP)`.
 
-5. **`repository_files`**:
-   - `id (UUID PK)`, `repository_id (UUID FK)`, `branch_id (UUID FK)`, `file_path (VARCHAR(1024))`, `file_name (VARCHAR(255))`, `extension (VARCHAR(32))`, `language (VARCHAR(64))`, `size_bytes (INTEGER)`, `content_hash (VARCHAR(64))`, `is_binary (BOOLEAN)`.
-   - Indexes: `(repository_id, branch_id, file_path)` UNIQUE.
+5. **`repository_index_versions`** (Atomic Index Versioning):
+   - `id (UUID PK)`, `repository_id (UUID FK)`, `branch_id (UUID FK)`, `commit_sha (VARCHAR(40))`, `status (enum: building, validated, active, superseded, failed)`, `total_files (INTEGER)`, `total_chunks (INTEGER)`, `created_at (TIMESTAMP)`, `completed_at (TIMESTAMP)`.
+   - **Promotion Lifecycle**: `BUILDING` $\rightarrow$ `VALIDATED` $\rightarrow$ `ACTIVE`. The previous `ACTIVE` index is preserved until the new index is validated, allowing instant atomic switching without holding long database transactions.
 
-6. **`code_chunks`**:
-   - `id (UUID PK)`, `file_id (UUID FK)`, `repository_id (UUID FK)`, `chunk_index (INTEGER)`, `chunk_type (enum: function, class, method, module, block, markdown_section)`, `symbol_name (VARCHAR(255) NULL)`, `start_line (INTEGER)`, `end_line (INTEGER)`, `content (TEXT)`, `token_count (INTEGER)`, `search_vector (tsvector - generated from content & symbol_name)`.
+6. **`repository_files`**:
+   - `id (UUID PK)`, `index_version_id (UUID FK)`, `repository_id (UUID FK)`, `file_path (VARCHAR(1024))`, `file_name (VARCHAR(255))`, `extension (VARCHAR(32))`, `language (VARCHAR(64))`, `size_bytes (INTEGER)`, `content_hash (VARCHAR(64))`, `is_binary (BOOLEAN)`.
+   - Unique constraint: `(index_version_id, file_path)`.
+
+7. **`code_chunks`**:
+   - `id (UUID PK)`, `index_version_id (UUID FK)`, `file_id (UUID FK)`, `repository_id (UUID FK)`, `chunk_index (INTEGER)`, `chunk_type (enum: function, class, method, interface, type_alias, module, block, markdown_section, data_block)`, `symbol_name (VARCHAR(255) NULL)`, `start_line (INTEGER)`, `end_line (INTEGER)`, `content (TEXT)`, `context_header (TEXT)`, `token_count (INTEGER)`, `search_vector (tsvector)`.
    - GIN Index on `search_vector` for keyword/identifier lookup.
 
-7. **`chunk_embeddings`** (Multi-model / Multi-version vector support):
-   - `id (UUID PK)`, `chunk_id (UUID FK)`, `provider (VARCHAR(32))`, `model (VARCHAR(64))`, `dimension (INTEGER)`, `embedding_version (INTEGER DEFAULT 1)`, `embedding (vector)`, `created_at (TIMESTAMP)`.
-   - HNSW Index on `embedding` with cosine distance for approximate nearest-neighbor search.
+8. **`chunk_embeddings`** (768d Vector Space with Metadata for Future Migrations):
+   - `id (UUID PK)`, `chunk_id (UUID FK)`, `index_version_id (UUID FK)`, `repository_id (UUID FK)`, `provider (VARCHAR(32) DEFAULT 'google')`, `model (VARCHAR(64) DEFAULT 'gemini-embedding-2')`, `dimension (INTEGER DEFAULT 768)`, `embedding_version (INTEGER DEFAULT 1)`, `embedding (vector(768))`, `created_at (TIMESTAMP)`.
+   - HNSW Index on `embedding` with cosine distance (`m = 16`, `ef_construction = 64` as initial parameters; performance and recall benchmarked against dataset scale).
 
-8. **`code_dependencies`** (Future dependency-aware retrieval foundation):
-   - `id (UUID PK)`, `file_id (UUID FK)`, `repository_id (UUID FK)`, `source_symbol (VARCHAR(255) NULL)`, `target_symbol (VARCHAR(255) NULL)`, `imported_path (VARCHAR(1024))`, `dependency_type (enum: import, call, inherit, implements)`.
+9. **`code_dependencies`**:
+   - `id (UUID PK)`, `index_version_id (UUID FK)`, `file_id (UUID FK)`, `repository_id (UUID FK)`, `source_symbol (VARCHAR(255) NULL)`, `target_symbol (VARCHAR(255) NULL)`, `imported_path (VARCHAR(1024))`, `dependency_type (enum: import, call, inheritance, implementation)`.
 
-9. **`conversations` & `messages`**:
-   - `conversations`: `id (UUID PK)`, `project_id (UUID FK)`, `user_id (UUID FK)`, `title (VARCHAR)`, `context_branch_id (UUID FK)`.
-   - `messages`: `id (UUID PK)`, `conversation_id (UUID FK)`, `sender (enum: user, assistant, system)`, `content (TEXT)`, `token_count (INTEGER)`, `model_used (VARCHAR)`, `latency_ms (INTEGER)`.
+10. **`conversations` & `messages`** (Phase 4):
+    - `conversations`: `id (UUID PK)`, `project_id (UUID FK)`, `user_id (UUID FK)`, `title (VARCHAR)`, `context_branch_id (UUID FK)`.
+    - `messages`: `id (UUID PK)`, `conversation_id (UUID FK)`, `sender (enum: user, assistant, system)`, `content (TEXT)`, `token_count (INTEGER)`, `model_used (VARCHAR)`, `latency_ms (INTEGER)`.
 
-10. **`citations`**:
-    - `id (UUID PK)`, `message_id (UUID FK)`, `chunk_id (UUID FK)`, `file_path (VARCHAR)`, `start_line (INTEGER)`, `end_line (INTEGER)`, `relevance_score (FLOAT)`.
+11. **`citations`** (Phase 4):
+    - `id (UUID PK)`, `message_id (UUID FK)`, `chunk_id (UUID FK)`, `index_version_id (UUID FK)`, `commit_sha (VARCHAR(40))`, `file_path (VARCHAR)`, `start_line (INTEGER)`, `end_line (INTEGER)`, `relevance_score (FLOAT)`.
+    - Every citation is strictly traceable back to repository, branch, commit SHA, file path, start line, end line, and index version.
 
-11. **`eval_datasets` & `eval_runs`**:
+12. **`eval_datasets` & `eval_runs`**:
     - `eval_datasets`: `id (UUID PK)`, `project_id (UUID FK)`, `name (VARCHAR)`, `test_cases (JSONB)`.
-    - `eval_runs`: `id (UUID PK)`, `dataset_id (UUID FK)`, `model_name (VARCHAR)`, `retrieval_recall_k (FLOAT)`, `citation_accuracy (FLOAT)`, `groundedness_score (FLOAT)`, `avg_latency_ms (INTEGER)`, `total_tokens (INTEGER)`, `estimated_cost_usd (DECIMAL(10,6))`.
+    - `eval_runs`: `id (UUID PK)`, `dataset_id (UUID FK)`, `model_name (VARCHAR)`, `recall_at_5 (FLOAT)`, `recall_at_10 (FLOAT)`, `mrr (FLOAT)`, `citation_accuracy (FLOAT)`, `branch_isolation_score (FLOAT)`, `avg_latency_ms (INTEGER)`, `total_tokens (INTEGER)`, `estimated_cost_usd (DECIMAL(10,6))`.
 
 ---
 
-## 5. API Boundary Specification
-
-### REST Endpoints
-* **Authentication**:
-  * `POST /api/v1/auth/github/login` (Initiates OAuth)
-  * `GET /api/v1/auth/github/callback` (Completes OAuth, returns JWT session)
-  * `GET /api/v1/auth/me` (Current authenticated user profile)
-* **Projects & Repositories**:
-  * `GET /api/v1/projects`, `POST /api/v1/projects`
-  * `GET /api/v1/projects/{project_id}/repositories`
-  * `POST /api/v1/projects/{project_id}/repositories/connect`
-* **Ingestion & Indexing**:
-  * `POST /api/v1/projects/{project_id}/repositories/{repo_id}/index` (Triggers ARQ full or incremental ingestion)
-  * `GET /api/v1/projects/{project_id}/repositories/{repo_id}/status` (Polling/Status endpoint)
-* **Retrieval & Files**:
-  * `POST /api/v1/projects/{project_id}/search/hybrid` (Search testing endpoint)
-  * `GET /api/v1/projects/{project_id}/files/{file_id}` (Retrieve file source)
-* **AI Conversations & Streaming**:
-  * `POST /api/v1/projects/{project_id}/conversations` (Create conversation session)
-  * `GET /api/v1/projects/{project_id}/conversations/{conv_id}/messages` (History)
-  * `POST /api/v1/projects/{project_id}/conversations/{conv_id}/messages/stream` (SSE streaming token-by-token + safe execution events + citations)
-* **Health & Diagnostics**:
-  * `GET /api/v1/health` (Checks DB connection, Redis pool, and ARQ queue readiness)
-
----
-
-## 6. Repository Ingestion & Incremental Indexing Engine
+## 5. Repository Ingestion & Incremental Indexing Engine
 
 ### Initial Supported Language Scope
 - **TypeScript** (`.ts`, `.tsx`)
@@ -266,95 +242,62 @@ erDiagram
 - **JSON** (`.json`)
 - **YAML** (`.yaml`, `.yml`)
 
-*(Additional languages like Go, Rust, Java, and C/C++ are documented as future extensions).*
-
-### Ingestion & Incremental Sync Workflow
+### Ingestion Workflow & Atomic Version Promotion
 
 ```mermaid
 flowchart TD
-    Trigger[GitHub Webhook / Manual Sync] --> FetchTree[Fetch Current Tree & File Hashes]
-    FetchTree --> DiffHashes{Compare with Stored Hashes}
+    Trigger[Index Trigger: Full or Incremental] --> StreamTarball[Stream HTTP Tarball Archive from GitHub]
+    StreamTarball --> StreamFilter[Stream Reader: Filter Ignores, Lockfiles, Binaries, Size Caps]
+    StreamFilter --> DiffHashes{Compare Content Hashes with Active Index}
     
-    DiffHashes -->|Unchanged| Skip[Skip File]
-    DiffHashes -->|Deleted| DeleteChunks[Remove Stale Chunks & Embeddings from DB]
+    DiffHashes -->|Unchanged| Reassign[Carry Over Unchanged File & Chunk IDs to New Index Version]
     DiffHashes -->|New or Modified| Parse[Tree-Sitter AST Parsing & Symbol Extraction]
     
-    Parse --> Chunk[AST-Bounded Chunking + Context Header Injection]
-    Chunk --> Embed[Batch Embedding Generation via EmbeddingProvider]
-    Embed --> Upsert[Transactional Upsert into PostgreSQL + pgvector + tsvector]
-    DeleteChunks --> Upsert
-    Upsert --> Ready[Update Branch indexed_at & status: ready]
+    Parse --> Chunk[AST Node-Bounded Chunking + Context Header Injection]
+    Chunk --> PersistDraft[Short DB Transaction: Save Draft Chunks under BUILDING Index Version]
+    
+    PersistDraft --> BatchEmbed[Batch Embeddings outside DB Transaction via gemini-embedding-2]
+    BatchEmbed --> PersistVectors[Short DB Transaction: Write Embeddings & tsvector]
+    
+    PersistVectors --> Validate[Validate Index Integrity: Chunks Count == Vectors Count]
+    Validate -->|Valid| Promote[Atomic DB Transaction: Promote Index to ACTIVE, Mark Old SUPERSEDED]
+    Validate -->|Invalid| Abort[Mark Index Version FAILED, Active Index Remains Unchanged]
 ```
 
-#### Full vs. Incremental Ingestion:
-1. **Incremental Ingestion (Default)**: Compares SHA-256 content hashes of files between the indexed commit and the latest branch commit. Only new, modified, or deleted files are parsed, chunked, embedded, or pruned.
-2. **Full Re-Index (Recovery Mode)**: Purges all chunks and embeddings for the repository branch and re-processes all files from scratch.
+#### Ingestion Rules & Operational Boundaries:
+1. **Streaming Tarball Reader**: Never buffer the entire repository tarball into RAM. The HTTP response is processed as a stream, unpacking individual files into bounded memory buffers for AST parsing.
+2. **Configurable Size Limits**: Configurable file size limits (`MAX_FILE_SIZE_BYTES`, default 1MB) and repository caps (`MAX_REPO_SIZE_BYTES`, default 500MB) via environment configuration.
+3. **Transaction Boundaries**: Database transactions are short and isolated. Long external embedding calls occur outside database transactions to prevent connection pool starvation or lock contention.
+4. **ARQ Job Payloads**: ARQ jobs pass only lightweight identifiers (`job_id`, `index_version_id`, `chunk_ids_batch`), fetching actual chunk contents from PostgreSQL.
 
 ---
 
-## 7. Hybrid Retrieval Architecture & Dependency Awareness
+## 6. Hybrid Retrieval Architecture & Rank Fusion
 
 ### 3-Stage Hybrid Retrieval
-1. **Dense Vector Search**: Approximate nearest neighbor search in `pgvector` using HNSW index and cosine distance.
-2. **Sparse Full-Text Search**: PostgreSQL `ts_rank_cd` on GIN-indexed `tsvector` generated from code and symbol identifiers.
-3. **Exact Path & Symbol Filtering**: Exact matching on symbol names and file paths.
+1. **Dense Vector Search**: Approximate nearest-neighbor search in `pgvector` on 768d `gemini-embedding-2` vectors using HNSW cosine distance.
+2. **Sparse Full-Text Search**: PostgreSQL `ts_rank_cd` over weighted GIN-indexed `tsvector` (Weight A on symbol names, Weight B on context headers, Weight C on body content).
+3. **Exact Path & Symbol Matching**: Exact and prefix matches on symbol names and file paths.
 
 Combined via **Reciprocal Rank Fusion (RRF)**:
-$$RRF(d) = \sum_{m \in M} \frac{1}{60 + r_m(d)}$$
-
-### Future Dependency-Aware Retrieval Flow
-```mermaid
-flowchart LR
-    Query[User Query] --> SeedSearch[Hybrid Search: Find Target Symbols/Files]
-    SeedSearch --> InspectDeps[Inspect Code Dependencies / Imports / Callers]
-    InspectDeps --> ExpandContext[Fetch Connected Dependency Chunks]
-    ExpandContext --> RankFusion[RRF Rerank Expanded Context]
-    RankFusion --> Synthesize[Synthesize Response with Comprehensive Context]
-```
+$$RRF(d) = \sum_{m \in M} \frac{w_m}{k + r_m(d)}$$
+- Constant $k = 60$.
+- Initial weights ($w_{\text{dense}} = 1.0, w_{\text{sparse}} = 0.8, w_{\text{symbol}} = 1.2$) treated as initial heuristics to be calibrated via benchmark evaluation datasets.
 
 ---
 
-## 8. LangGraph Initial Agent Architecture: Project Assistant
+## 7. EmbeddingProvider Abstraction
 
-Forge AI begins with a single, highly capable **Project Assistant** graph rather than premature multi-agent complexity:
-
-```mermaid
-stateDiagram-v2
-    [*] --> QueryUnderstanding
-    QueryUnderstanding --> HybridRetrieval : Extract Key Concepts & Symbols
-    HybridRetrieval --> EvidenceAnalysis : Collect Top Chunks
-    EvidenceAnalysis --> VerificationCheck : Are facts grounded in repository code?
-    VerificationCheck --> HybridRetrieval : Missing info (Follow imports / references)
-    VerificationCheck --> ResponseSynthesis : Sufficient evidence confirmed
-    ResponseSynthesis --> FormatCitations
-    FormatCitations --> [*]
-```
-
-### Safe Agent Observability Model
-To protect internal reasoning models and avoid leaking sensitive or unrefined reasoning traces to users, the frontend receives only structured, high-level execution status events via SSE:
-
-| Emitted Safe Event | UI Display Text | Purpose |
-| :--- | :--- | :--- |
-| `event: understanding_query` | "Understanding request..." | Indicates query decomposition & intent parsing |
-| `event: searching_repository` | "Searching repository & symbols..." | Indicates vector & keyword search |
-| `event: retrieving_files` | "Retrieving relevant files..." | Indicates chunk retrieval from database |
-| `event: analyzing_evidence` | "Analyzing code context..." | Indicates evidence evaluation |
-| `event: validating_sources` | "Validating references..." | Indicates fact-grounding verification |
-| `event: generating_response` | Token stream (`data: ...`) | Emits final synthesized response tokens |
-| `event: citations` | Citation pills | Emits verified source references and line numbers |
-
-*Private model internal chain-of-thought is strictly omitted from client streams.*
-
----
-
-## 9. EmbeddingProvider & LLMGateway Abstractions
-
-### EmbeddingProvider Abstraction
 ```python
 class EmbeddingProvider(ABC):
     @abstractmethod
-    async def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of text chunks."""
+        pass
+
+    @abstractmethod
+    async def embed_query(self, text: str) -> list[float]:
+        """Generate embedding for a search query."""
         pass
 
     @property
@@ -371,56 +314,33 @@ class EmbeddingProvider(ABC):
     def version(self) -> int: ...
 ```
 
-Supported providers:
-- **Google Gemini** (`text-embedding-004`, 768 dimensions)
-- **OpenAI** (`text-embedding-3-small`, 1536 dimensions; `text-embedding-3-large`, 3072 dimensions)
-
-### LLMGateway Abstraction
-- Provider-agnostic model routing (Google Gemini, OpenAI, Anthropic).
-- Task-complexity routing: lightweight model for intent classification & query expansion; high-reasoning model for response synthesis.
-- Token consumption and cost telemetry tracking.
+- **Phase 3 Default**: Google `gemini-embedding-2` (768 dimensions).
+- **Alternative Provider**: OpenAI `text-embedding-3-small` (1536 dimensions).
+- **Pricing Policy**: Embedding costs are not hardcoded with static rates; costs are calculated based on current verified provider pricing at implementation time.
 
 ---
 
-## 10. Background Processing with ARQ
+## 8. Security Model & Untrusted Data Boundary
 
-Background asynchronous processing is managed strictly via **ARQ** backed by Redis:
-
-- **Queue Architecture**:
-  - `ingestion`: Long-running repository cloning, AST parsing, and chunking tasks.
-  - `embeddings`: Batch embedding generation with rate-limit handling and backoff retries.
-  - `analysis`: Heavy multi-hop dependency analysis and evaluation runs.
-- **Worker Configuration**:
-  - Max concurrent jobs configured per queue.
-  - Redis connection pool with automated reconnection.
-  - Job timeout and failure retry policies with exponential backoff.
+1. **Untrusted Data Isolation**:
+   - Ingested repository content (code, comments, markdown, commit messages) is classified strictly as **Untrusted Data**.
+   - Repository content must never be interpreted as developer or system instructions by AI components.
+   - In Phase 4, all repository text is isolated within strict non-executable data boundaries.
+2. **Tenant & Branch Isolation**:
+   - Every retrieval query strictly enforces `index_version.status = 'active'` and `repository.project_id = :project_id` at the database level.
+3. **Ephemeral Credentials**:
+   - Zero installation access tokens or private keys stored in PostgreSQL.
 
 ---
 
-## 11. Security Model & Credential Protection
+## 9. AI Evaluation & Benchmark Strategy
 
-1. **Credential Encryption**:
-   - User GitHub OAuth access tokens and Personal Access Tokens are encrypted at rest using **AES-256-GCM** (Authenticated Encryption with Associated Data).
-   - Encryption keys are loaded strictly from environment secrets.
-2. **Untrusted Repository Content Boundary**:
-   - Ingested repository content (code, comments, markdown, commit messages) is treated as untrusted user input.
-   - All repository context injected into LLM prompts is isolated within strict XML tags: `<repository_context>` with special character escaping to defend against indirect prompt injection.
-3. **Tenant Isolation**:
-   - Multi-tenant isolation is enforced at the database query level with mandatory `organization_id` / `project_id` filters.
-
----
-
-## 12. Lightweight AI Evaluation Framework
-
-The initial evaluation framework is custom, transparent, and lightweight:
-
-1. **Curated Repository Evaluation Dataset**:
-   - Standard set of repository-specific questions.
-   - Expected relevant files and symbol identifiers.
-   - Ground truth answer criteria.
-2. **Evaluated Metrics**:
-   - **Retrieval Recall@K**: Did top-K retrieved chunks include expected source files?
-   - **Citation Accuracy**: Do cited line ranges match the actual implementation?
-   - **Answer Groundedness**: Is the answer supported by retrieved chunks without unsupported claims?
-   - **Latency (ms)**: Time to first token and total response duration.
-   - **Token Usage & Estimated Cost ($)**: Total prompt and completion tokens tracked per evaluation run.
+Phase 3 introduces an automated evaluation suite evaluating retrieval quality:
+- **Evaluated Metrics**:
+  - **Recall@5 & Recall@10**: Proportion of test queries where relevant code files/symbols appear in top 5 / top 10 results.
+  - **Mean Reciprocal Rank (MRR)**: Average reciprocal rank of the first relevant chunk.
+  - **Citation Accuracy**: Percentage of retrieved line spans covering the complete function/class definition.
+  - **Branch Isolation**: Verification that queries on branch A never return chunks from branch B.
+  - **Retrieval Latency (ms)**: Dense search vs sparse search vs RRF fusion timings.
+  - **Token Consumption & Estimated Cost ($)**: Total tokens embedded during indexing and querying against verified provider pricing.
+- **Benchmark Dataset**: Curated test repository with multi-file dependencies, exact symbol lookups, and conceptual code questions.

@@ -64,7 +64,7 @@ We will use **LangGraph** to model our agent workflows. We will begin with a sin
 ## ADR-004: Tree-sitter AST Structural Chunking with Context Injection
 
 ### Status
-Accepted
+Accepted (Superseded in detail by ADR-013)
 
 ### Context
 Splitting code files arbitrarily every fixed number of characters or tokens severs function definitions, splits class signatures, and loses enclosing context (e.g. class name or decorators), degrading embedding quality and retrieval precision.
@@ -86,7 +86,7 @@ We will use **Tree-sitter** grammar parsers to parse source code into Abstract S
 ## ADR-005: 3-Way Hybrid Search with Reciprocal Rank Fusion (RRF)
 
 ### Status
-Accepted
+Accepted (Superseded in detail by ADR-014)
 
 ### Context
 Software engineering queries require both conceptual understanding (e.g. "how does session validation work?") and exact symbol matching (e.g. `validateOAuthToken_v2` or `src/api/auth.py`).
@@ -133,7 +133,7 @@ We establish three logical queues:
 ## ADR-007: Incremental Repository Indexing via Content Hashing
 
 ### Status
-Accepted
+Accepted (Superseded in detail by ADR-015)
 
 ### Context
 Re-indexing an entire repository on every commit is computationally expensive, slow, and wasteful for LLM embedding API quotas.
@@ -155,13 +155,13 @@ We will implement an **Incremental Indexing Pipeline**:
 ## ADR-008: EmbeddingProvider Abstraction & Multi-Version Vector Schema
 
 ### Status
-Accepted
+Accepted (Superseded in detail by ADR-016)
 
 ### Context
 Hard-coding a single embedding model (e.g. OpenAI or Gemini) prevents future model upgrades or embedding provider switching without major database refactoring.
 
 ### Decision
-1. Implement an `EmbeddingProvider` abstract interface supporting multiple providers (Google Gemini `text-embedding-004`, OpenAI `text-embedding-3-small`, etc.).
+1. Implement an `EmbeddingProvider` abstract interface supporting multiple providers (Google Gemini, OpenAI, etc.).
 2. Store vector records in `chunk_embeddings` with explicit metadata: `chunk_id`, `provider`, `model`, `dimension`, `embedding_version`, `embedding`, and `created_at`.
 
 ### Consequences
@@ -288,6 +288,87 @@ Forge AI can only discover and access repositories that were explicitly selected
   - Granular repository selection gives users full control over which repositories Forge AI can access.
   - Short-lived installation tokens (1 hour TTL) minimize blast radius if a session is compromised.
   - Organization-friendly: Supports GitHub Enterprise Cloud SAML SSO and organization approval policies.
-  - Clean upgrade path: When Phase 6 introduces automated PR reviews, we can request `Pull Requests: Write` as an isolated, explicit permission upgrade.
 - **Negative**:
   - Requires managing a GitHub App Private Key (`.pem`) for generating installation JWTs alongside Client ID / Client Secret.
+
+---
+
+## ADR-013: Tree-sitter Structural AST Parsing & Context-Injected Semantic Chunking
+
+### Status
+Accepted
+
+### Context
+Line-based or character-count chunking cuts across function signatures, splits class bodies, and loses enclosing context (e.g. class name or decorators). For high-precision code retrieval, chunks must align with AST syntax nodes while retaining file and enclosing symbol context.
+
+### Decision
+1. Use **Tree-sitter** C-bindings in Python supporting: TypeScript, JavaScript, Python, Markdown, JSON, YAML.
+2. Form chunks along AST node boundaries (`function_definition`, `class_declaration`, `method_definition`, `interface_declaration`, Markdown sections).
+3. Prepend every chunk with a context header before embedding (`// File: ... | Class: ... | Method: ...`).
+4. Apply an AST block-aware sliding window (600 tokens with 100 token overlap) only when individual AST nodes exceed 800 tokens.
+
+### Consequences
+- **Positive**: Syntactically complete chunks; accurate line-span citations; superior semantic search precision.
+- **Negative**: Requires C-grammar dependencies in the Docker image.
+
+---
+
+## ADR-014: 3-Stage Hybrid Retrieval with Reciprocal Rank Fusion (RRF)
+
+### Status
+Accepted
+
+### Context
+Code queries range from conceptual ("how does session validation work?") to exact symbol lookups (`validateToken_v2`). Dense vector search alone misses exact identifiers, while keyword search misses abstract concepts.
+
+### Decision
+Implement a 3-Stage Hybrid Retrieval Pipeline combined via Reciprocal Rank Fusion (RRF):
+1. **Dense Vector Search**: pgvector HNSW Cosine distance on 768d `gemini-embedding-2` vectors.
+2. **Sparse Full-Text Search**: PostgreSQL `ts_rank_cd` on weighted GIN-indexed `tsvector`.
+3. **Exact Symbol / Path Matching**: Boosted exact matches on symbol names and file paths.
+$$RRF(d) = \sum_{m \in M} \frac{w_m}{60 + r_m(d)}$$
+Initial weights ($w_{\text{dense}}=1.0, w_{\text{sparse}}=0.8, w_{\text{symbol}}=1.2$) will be calibrated against benchmark datasets.
+
+### Consequences
+- **Positive**: Comprehensive recall across both conceptual and exact symbol queries.
+- **Negative**: Requires computing query embeddings and executing both vector and text searches.
+
+---
+
+## ADR-015: Ephemeral Streaming Tarball Ingestion & Atomic Index Version Promotion
+
+### Status
+Accepted
+
+### Context
+Buffering large repository archives into server RAM or holding long database transactions across slow external embedding API calls causes memory exhaustion and database lock starvation.
+
+### Decision
+1. **Streaming Ingestion**: Stream repository tarballs via GitHub API directly through an archive reader, unpacking only bounded per-file buffers in memory.
+2. **Atomic Index Versioning**: Introduce `repository_index_versions` (`BUILDING` $\rightarrow$ `VALIDATED` $\rightarrow$ `ACTIVE`).
+3. **Transaction Boundaries**: External embedding calls occur outside database transactions. Short DB transactions are used to persist draft chunks and execute atomic version promotion.
+4. **ARQ Payloads**: Background jobs pass only lightweight IDs (`job_id`, `index_version_id`, `chunk_ids_batch`), never bulk chunk objects.
+
+### Consequences
+- **Positive**: Predictable low memory footprint; zero database lock contention; zero dangling failed indexes.
+- **Negative**: Requires index version foreign key management.
+
+---
+
+## ADR-016: Unified 768d Vector Space with gemini-embedding-2 & EmbeddingProvider Abstraction
+
+### Status
+Accepted
+
+### Context
+We need high-quality code embeddings with reasonable cost and latency, while retaining multi-provider flexibility without introducing multi-dimensional schema complexity.
+
+### Decision
+1. Use **Google `gemini-embedding-2`** with a standardized **768 output dimension** as the primary vector space for Phase 3.
+2. Retain the `EmbeddingProvider` abstract base class to support alternate providers (e.g. OpenAI `text-embedding-3-small`).
+3. Store `provider`, `model`, `dimension`, and `embedding_version` metadata in `chunk_embeddings` for future vector migrations.
+4. Use initial HNSW parameters: `m = 16`, `ef_construction = 64`.
+
+### Consequences
+- **Positive**: Fast, cost-effective vector search; clean single-dimension schema; future-proof provider switching.
+- **Negative**: Changing default providers in the future requires re-indexing.
