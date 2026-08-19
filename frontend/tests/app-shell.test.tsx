@@ -16,7 +16,7 @@ describe("Frontend App Shell & Navigation", () => {
   it("renders branding and version tag", () => {
     render(<Sidebar />);
     expect(screen.getByText("Forge AI")).toBeInTheDocument();
-    expect(screen.getByText("Phase 1 Foundation")).toBeInTheDocument();
+    expect(screen.getByText("Phase 4 Agent Live")).toBeInTheDocument();
   });
 
   it("renders core navigation items", () => {
@@ -28,9 +28,9 @@ describe("Frontend App Shell & Navigation", () => {
 
   it("renders upcoming capabilities preview", () => {
     render(<Sidebar />);
-    expect(screen.getByText("Code Assistant")).toBeInTheDocument();
     expect(screen.getByText("PR Reviewer")).toBeInTheDocument();
-    expect(screen.getByText("Architecture Map")).toBeInTheDocument();
+    expect(screen.getByText("Architecture Visualizer")).toBeInTheDocument();
+    expect(screen.getByText("Autonomous Refactor")).toBeInTheDocument();
   });
 
   it("API client manages token correctly", () => {
