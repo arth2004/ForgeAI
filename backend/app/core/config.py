@@ -111,6 +111,14 @@ class Settings(BaseSettings):
         default=900, description="ARQ indexing worker job timeout in seconds (15 minutes)"
     )
 
+    # Phase 4A Agent Foundation Settings
+    AGENT_DEFAULT_PROVIDER: str = Field(default="google", description="Default LLM provider: google, openai, or mock")
+    AGENT_GEMINI_MODEL: str = Field(default="gemini-2.5-pro", description="Default Google Gemini chat model")
+    AGENT_OPENAI_MODEL: str = Field(default="gpt-4o", description="Default OpenAI chat model")
+    AGENT_TEMPERATURE: float = Field(default=0.2, description="Default sampling temperature for agent reasoning")
+    AGENT_MAX_TOKENS: int | None = Field(default=4096, description="Maximum token generation limit")
+    AGENT_TIMEOUT_SECONDS: float = Field(default=60.0, description="Model invocation timeout in seconds")
+
     # Frontend URL
     FRONTEND_URL: str = Field(default="http://localhost:3000")
 
@@ -120,3 +128,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
