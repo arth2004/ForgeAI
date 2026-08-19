@@ -24,6 +24,7 @@ import { Project, Repository } from "@/types";
 import { IndexStatusCard } from "@/components/indexing/IndexStatusCard";
 import { FileExplorerTree } from "@/components/indexing/FileExplorerTree";
 import { RetrievalSandbox } from "@/components/indexing/RetrievalSandbox";
+import { AgentChat } from "@/components/agent/AgentChat";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -31,7 +32,7 @@ export default function ProjectWorkspacePage() {
   const queryClient = useQueryClient();
   const projectId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<"overview" | "retrieval" | "files">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "agent" | "retrieval" | "files">("overview");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -143,7 +144,7 @@ export default function ProjectWorkspacePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-white/10 gap-2">
+      <div className="flex border-b border-white/10 gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-all ${
@@ -154,6 +155,18 @@ export default function ProjectWorkspacePage() {
         >
           <Layers className="h-4 w-4" />
           <span>Overview & Index Status</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("agent")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-all ${
+            activeTab === "agent"
+              ? "border-cyan-500 text-cyan-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-cyan-400" />
+          <span>Forge AI Agent</span>
         </button>
 
         <button
@@ -220,6 +233,14 @@ export default function ProjectWorkspacePage() {
               <div className="mt-4 space-y-2">
                 <button
                   type="button"
+                  onClick={() => setActiveTab("agent")}
+                  className="w-full flex items-center justify-between rounded-lg border border-cyan-500/20 bg-cyan-950/30 px-4 py-2.5 text-xs font-medium text-cyan-200 hover:bg-cyan-900/40 hover:text-white transition-colors"
+                >
+                  <span>Ask Forge AI Repository Agent</span>
+                  <Sparkles className="h-4 w-4 text-cyan-400" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveTab("retrieval")}
                   className="w-full flex items-center justify-between rounded-lg border border-white/10 bg-slate-800/60 px-4 py-2.5 text-xs font-medium text-slate-200 hover:bg-slate-700/60 hover:text-white transition-colors"
                 >
@@ -238,6 +259,15 @@ export default function ProjectWorkspacePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === "agent" && (
+        <AgentChat
+          projectId={project.id}
+          repositoryId={repo?.id}
+          repositoryName={repo?.full_name}
+          branchName={repo?.default_branch}
+        />
       )}
 
       {activeTab === "retrieval" && <RetrievalSandbox projectId={project.id} />}

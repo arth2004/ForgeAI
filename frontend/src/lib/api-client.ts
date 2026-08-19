@@ -355,6 +355,14 @@ class ApiClient {
   async getFileDetail(projectId: string, fileId: string): Promise<any> {
     return this.request(`/projects/${projectId}/files/${fileId}`);
   }
+
+  // Agent Chat
+  async sendAgentMessage(payload: any): Promise<any> {
+    return this.request(`/agent/chat`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

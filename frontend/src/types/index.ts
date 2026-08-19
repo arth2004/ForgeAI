@@ -1,4 +1,5 @@
 export * from "./ingestion";
+export * from "./agent";
 
 export interface HealthStatus {
   status: "ok" | "degraded" | "down";
