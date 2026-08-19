@@ -127,7 +127,7 @@ def test_get_chat_model_provider_factory():
     assert isinstance(openai_p, OpenAIChatModelProvider)
     assert openai_p.provider_name == "openai"
 
-    gemini_p = get_chat_model_provider(provider="google", model_name="gemini-2.5-pro")
+    gemini_p = get_chat_model_provider(provider="google", model_name="gemini-1.5-flash")
     assert isinstance(gemini_p, GeminiChatModelProvider)
     assert gemini_p.provider_name == "google"
 

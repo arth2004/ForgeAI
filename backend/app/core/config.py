@@ -113,7 +113,7 @@ class Settings(BaseSettings):
 
     # Phase 4A Agent Foundation Settings
     AGENT_DEFAULT_PROVIDER: str = Field(default="google", description="Default LLM provider: google, openai, or mock")
-    AGENT_GEMINI_MODEL: str = Field(default="gemini-2.5-pro", description="Default Google Gemini chat model")
+    AGENT_GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Default Google Gemini chat model")
     AGENT_OPENAI_MODEL: str = Field(default="gpt-4o", description="Default OpenAI chat model")
     AGENT_TEMPERATURE: float = Field(default=0.2, description="Default sampling temperature for agent reasoning")
     AGENT_MAX_TOKENS: int | None = Field(default=4096, description="Maximum token generation limit")

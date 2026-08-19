@@ -112,7 +112,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-2.5-pro",
+        model_name: str = "gemini-1.5-flash",
         temperature: float = 0.2,
         max_tokens: int | None = 4096,
         timeout_seconds: float = 60.0,
@@ -168,8 +168,17 @@ class GeminiChatModelProvider(BaseChatModelProvider):
 
             if response.status_code != 200:
                 sanitized_error = sanitize_secret_text(response.text)
+                err_detail = sanitized_error
+                try:
+                    err_json = response.json()
+                    if isinstance(err_json, dict) and "error" in err_json:
+                        err_obj = err_json["error"]
+                        if isinstance(err_obj, dict) and "message" in err_obj:
+                            err_detail = err_obj["message"]
+                except Exception:
+                    pass
                 raise ModelProviderException(
-                    message=f"Gemini API returned status {response.status_code}: {sanitized_error}",
+                    message=f"Gemini API returned status {response.status_code}: {err_detail}",
                     provider=self.provider_name,
                     status_code=response.status_code,
                 )
@@ -231,9 +240,10 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
                 provider=self.provider_name,
             )
 
+        formatted_messages = self._convert_messages_to_openai_payload(messages)
         payload: dict[str, Any] = {
             "model": self.model_name,
-            "messages": self._convert_messages_to_openai_payload(messages),
+            "messages": formatted_messages,
             "temperature": self.temperature,
         }
         if self.max_tokens:
@@ -251,8 +261,17 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
 
             if response.status_code != 200:
                 sanitized_error = sanitize_secret_text(response.text)
+                err_detail = sanitized_error
+                try:
+                    err_json = response.json()
+                    if isinstance(err_json, dict) and "error" in err_json:
+                        err_obj = err_json["error"]
+                        if isinstance(err_obj, dict) and "message" in err_obj:
+                            err_detail = err_obj["message"]
+                except Exception:
+                    pass
                 raise ModelProviderException(
-                    message=f"OpenAI API returned status {response.status_code}: {sanitized_error}",
+                    message=f"OpenAI API returned status {response.status_code}: {err_detail}",
                     provider=self.provider_name,
                     status_code=response.status_code,
                 )

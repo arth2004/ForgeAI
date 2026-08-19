@@ -1,6 +1,47 @@
 import { AgentChatRequest, AgentChatResponse, AgentStreamEvent } from "@/types";
 import { apiClient } from "@/lib/api-client";
 
+export function cleanAgentErrorMessage(raw?: string | null): string {
+  if (!raw) return "An unexpected error occurred while communicating with Forge AI.";
+
+  let cleaned = raw.trim();
+
+  // Try to parse if raw is a JSON string or contains a JSON substring
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error?.message) {
+        const prefix = cleaned.split("{")[0].trim();
+        cleaned = prefix ? `${prefix} ${parsed.error.message}` : parsed.error.message;
+      } else if (parsed.message) {
+        cleaned = parsed.message;
+      } else if (parsed.detail) {
+        cleaned = parsed.detail;
+      }
+    } catch {
+      // Keep raw string if JSON parse fails
+    }
+  }
+
+  // Model availability errors
+  if (cleaned.includes("no longer available") || cleaned.includes("NOT_FOUND") || cleaned.includes("model_not_found")) {
+    return `Model Configuration Error: ${cleaned}. Check your AGENT_GEMINI_MODEL or AGENT_OPENAI_MODEL in .env.`;
+  }
+
+  // API Key missing
+  if (cleaned.includes("is not configured in settings or environment")) {
+    return "Configuration Error: LLM API key is missing. Please set GEMINI_API_KEY or OPENAI_API_KEY in your backend .env file.";
+  }
+
+  // Rate limits / quotas
+  if (cleaned.includes("RESOURCE_EXHAUSTED") || cleaned.includes("quota exceeded") || cleaned.includes("rate limit")) {
+    return "Quota Exceeded: The AI model provider daily quota or rate limit has been reached. Please try again shortly.";
+  }
+
+  return cleaned;
+}
+
 export function formatAgentErrorMessage(status: number, defaultMsg?: string): string {
   switch (status) {
     case 401:
@@ -18,7 +59,7 @@ export function formatAgentErrorMessage(status: number, defaultMsg?: string): st
     case 504:
       return "The agent took too long to respond. Try asking a more specific question.";
     default:
-      return defaultMsg || "An unexpected error occurred while communicating with Forge AI.";
+      return cleanAgentErrorMessage(defaultMsg);
   }
 }
 
