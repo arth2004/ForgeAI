@@ -1,3 +1,4 @@
+from app.models.agent import AgentSession
 from app.models.auth import Membership, Organization, Role, User
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.codebase import (
@@ -36,4 +37,5 @@ __all__ = [
     "DependencyType",
     "IndexingJob",
     "IndexingJobStatus",
+    "AgentSession",
 ]

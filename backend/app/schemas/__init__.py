@@ -1,3 +1,10 @@
+from app.schemas.agent import (
+    AgentChatMetadata,
+    AgentChatRequest,
+    AgentChatResponse,
+    AgentSessionResponse,
+    AgentSourceReference,
+)
 from app.schemas.auth import (
     TokenResponse,
     UserLogin,
@@ -21,6 +28,11 @@ from app.schemas.repository import (
 )
 
 __all__ = [
+    "AgentChatMetadata",
+    "AgentChatRequest",
+    "AgentChatResponse",
+    "AgentSessionResponse",
+    "AgentSourceReference",
     "UserRegister",
     "UserLogin",
     "TokenResponse",

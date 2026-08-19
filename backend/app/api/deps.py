@@ -11,10 +11,10 @@ from app.services.auth_service import AuthService
 
 
 async def get_current_user(
-    authorization: str = Header(..., description="Bearer JWT token"),
+    authorization: str | None = Header(None, description="Bearer JWT token"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         raise UnauthorizedException("Authorization header must be Bearer token.")
 
     token = authorization[7:].strip()

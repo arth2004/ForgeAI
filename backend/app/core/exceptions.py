@@ -68,3 +68,33 @@ class EmbeddingQuotaExhaustedException(ForgeAIException):
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             details=details or {},
         )
+
+
+class AgentTimeoutException(ForgeAIException):
+    """Raised when agent execution exceeds maximum permitted execution duration."""
+
+    def __init__(
+        self,
+        message: str = "Agent execution timed out.",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            details=details or {},
+        )
+
+
+class RateLimitException(ForgeAIException):
+    """Raised when a client exceeds rate or usage limits."""
+
+    def __init__(
+        self,
+        message: str = "Rate limit or usage quota exceeded.",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            details=details or {},
+        )
