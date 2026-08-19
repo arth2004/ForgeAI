@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import case, desc, func, or_, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -320,16 +320,16 @@ class HybridSearchEngine:
 
                     # Exact symbol declaration match (e.g. `delete`, `GitHubAuthService`, `ProjectService`, `CodeChunker`)
                     score_exprs.append(
-                        case((is_ast_chunk_cond & (func.lower(CodeChunk.symbol_name) == t), int(260 * weight_mult)), else_=0)
+                        case((and_(is_ast_chunk_cond, func.lower(CodeChunk.symbol_name) == t), int(260 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"{t}%"), int(150 * weight_mult)), else_=0)
+                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"{t}%")), int(150 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}"), int(120 * weight_mult)), else_=0)
+                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}")), int(120 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}%"), int(70 * weight_mult)), else_=0)
+                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%")), int(70 * weight_mult)), else_=0)
                     )
 
                     # Specific filename & path matches
@@ -357,7 +357,7 @@ class HybridSearchEngine:
                             case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(50 * weight_mult)), else_=0)
                         )
 
-                    filter_conditions.append(is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}%"))
+                    filter_conditions.append(and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%")))
                     filter_conditions.append(RepositoryFile.file_path.ilike(f"%{t}%"))
 
                 if is_sqlite:
