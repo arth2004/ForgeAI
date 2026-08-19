@@ -73,9 +73,11 @@ STEM_SYNONYMS = {
     "index": ["indexing", "indexer", "version", "engine", "differ"],
     "embeddings": ["embedding", "embed", "vector", "gemini", "openai", "dimension", "provider"],
     "embedding": ["embeddings", "embed", "vector", "gemini", "openai", "dimension", "provider"],
-    "promotion": ["promote", "promotion", "active", "version", "engine", "lifecycle", "validated", "superseded"],
-    "promote": ["promotion", "promote", "active", "version", "engine", "lifecycle", "validated"],
-    "atomic": ["atomic", "transaction", "engine", "promotion", "lifecycle"],
+    "generate": ["generate", "generated", "embed_documents", "embed_query", "embed", "embeddings"],
+    "generated": ["generate", "generated", "embed_documents", "embed_query", "embed", "embeddings"],
+    "promotion": ["promote", "promotion", "active", "version", "engine", "lifecycle", "validated", "superseded", "run_indexing"],
+    "promote": ["promotion", "promote", "active", "version", "engine", "lifecycle", "validated", "run_indexing"],
+    "atomic": ["atomic", "transaction", "engine", "promotion", "lifecycle", "run_indexing"],
     "changed": ["differ", "diff", "difference", "delta", "modified", "change", "content_hash"],
     "incremental": ["incremental", "differ", "diff", "delta", "change", "content_hash", "modified"],
     "diff": ["differ", "diff", "difference", "delta", "incremental", "changed"],
@@ -307,46 +309,55 @@ class HybridSearchEngine:
                     is_primary = t in code_terms
                     weight_mult = 1.0 if is_primary else 0.75
 
+                    # Symbol declaration matches ONLY apply to code AST declarations (CLASS, FUNCTION, METHOD, INTERFACE, MODULE)
+                    is_ast_chunk_cond = CodeChunk.chunk_type.in_([
+                        ChunkType.CLASS,
+                        ChunkType.FUNCTION,
+                        ChunkType.METHOD,
+                        ChunkType.INTERFACE,
+                        ChunkType.MODULE,
+                    ])
+
                     # Exact symbol declaration match (e.g. `delete`, `GitHubAuthService`, `ProjectService`, `CodeChunker`)
                     score_exprs.append(
-                        case((func.lower(CodeChunk.symbol_name) == t, int(220 * weight_mult)), else_=0)
+                        case((is_ast_chunk_cond & (func.lower(CodeChunk.symbol_name) == t), int(260 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((CodeChunk.symbol_name.ilike(f"{t}%"), int(120 * weight_mult)), else_=0)
+                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"{t}%"), int(150 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((CodeChunk.symbol_name.ilike(f"%{t}"), int(100 * weight_mult)), else_=0)
+                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}"), int(120 * weight_mult)), else_=0)
                     )
                     score_exprs.append(
-                        case((CodeChunk.symbol_name.ilike(f"%{t}%"), int(60 * weight_mult)), else_=0)
+                        case((is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}%"), int(70 * weight_mult)), else_=0)
                     )
 
                     # Specific filename & path matches
                     if t not in GENERIC_FILENAMES:
-                        # Exact file stem (e.g. auth.py, differ.py, chunker.py, security.py)
+                        # Exact file stem (e.g. auth.py, differ.py, chunker.py, security.py, gemini.py, engine.py)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}.%"), int(160 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}.%"), int(180 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}_%"), int(90 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}_%"), int(100 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%_{t}.%"), int(90 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%_{t}.%"), int(100 * weight_mult)), else_=0)
                         )
-                        # Directory match (e.g. /parser/, /retrieval/, /github/, /embedding/)
+                        # Directory match (e.g. /parser/, /retrieval/, /github/, /embedding/, /ingestion/)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(80 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(90 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%{t}%"), int(25 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%{t}%"), int(30 * weight_mult)), else_=0)
                         )
                     else:
                         # Generic filename terms require directory match
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(40 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(50 * weight_mult)), else_=0)
                         )
 
-                    filter_conditions.append(CodeChunk.symbol_name.ilike(f"%{t}%"))
+                    filter_conditions.append(is_ast_chunk_cond & CodeChunk.symbol_name.ilike(f"%{t}%"))
                     filter_conditions.append(RepositoryFile.file_path.ilike(f"%{t}%"))
 
                 if is_sqlite:
@@ -358,33 +369,43 @@ class HybridSearchEngine:
                     )
                     c_rows = (await session.execute(c_rows_stmt)).all()
                     scored_matches = []
-                    for cid, sym, _ctype, fpath in c_rows:
+                    for cid, sym, ctype_val, fpath in c_rows:
                         match_score = 0
                         sym_l = (sym or "").lower()
                         fpath_l = (fpath or "").lower()
+                        is_code_chunk = ctype_val in {
+                            ChunkType.CLASS,
+                            ChunkType.FUNCTION,
+                            ChunkType.METHOD,
+                            ChunkType.INTERFACE,
+                            ChunkType.MODULE,
+                            "class", "function", "method", "interface", "module",
+                        }
+
                         for term in all_search_terms:
                             t = term.lower()
                             is_primary = t in code_terms
                             weight_mult = 1.0 if is_primary else 0.75
 
-                            if sym_l == t:
-                                match_score += int(220 * weight_mult)
-                            elif sym_l.startswith(t):
-                                match_score += int(120 * weight_mult)
-                            elif sym_l.endswith(t):
-                                match_score += int(100 * weight_mult)
-                            elif t in sym_l:
-                                match_score += int(60 * weight_mult)
+                            if is_code_chunk:
+                                if sym_l == t:
+                                    match_score += int(260 * weight_mult)
+                                elif sym_l.startswith(t):
+                                    match_score += int(150 * weight_mult)
+                                elif sym_l.endswith(t):
+                                    match_score += int(120 * weight_mult)
+                                elif t in sym_l:
+                                    match_score += int(70 * weight_mult)
 
                             if t not in GENERIC_FILENAMES:
                                 if f"/{t}." in fpath_l:
-                                    match_score += int(160 * weight_mult)
+                                    match_score += int(180 * weight_mult)
                                 elif f"/{t}_" in fpath_l or f"_{t}." in fpath_l:
-                                    match_score += int(90 * weight_mult)
+                                    match_score += int(100 * weight_mult)
                                 elif f"/{t}/" in fpath_l:
-                                    match_score += int(80 * weight_mult)
+                                    match_score += int(90 * weight_mult)
                                 elif t in fpath_l:
-                                    match_score += int(25 * weight_mult)
+                                    match_score += int(30 * weight_mult)
 
                         if match_score > 0:
                             scored_matches.append((cid, match_score))
@@ -448,17 +469,17 @@ class HybridSearchEngine:
                     if is_code_file and is_named_decl:
                         # Direct named declaration (CLASS/FUNCTION/METHOD) in code implementation file
                         s_rank = symbol_ranks.get(chunk_id)
-                        if s_rank and s_rank <= 5:
+                        if s_rank and s_rank <= 10:
                             # High-confidence exact declaration match
-                            rrf_calc *= 1.8
+                            rrf_calc *= 2.2
                         else:
-                            rrf_calc *= 1.4
+                            rrf_calc *= 1.6
                     elif is_code_file:
                         # Top-level code module or block
-                        rrf_calc *= 1.15
+                        rrf_calc *= 1.25
                     elif not is_code_file:
                         # Documentation markdown file
-                        rrf_calc *= 0.70
+                        rrf_calc *= 0.45
 
                 rrf_scores[chunk_id] = rrf_calc
 
