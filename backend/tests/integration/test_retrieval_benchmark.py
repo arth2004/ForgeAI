@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -66,19 +67,7 @@ async def indexed_forgeai_multi_domain_repo(db_session, test_user: User):
     await db_session.flush()
 
     # 2. Define 10 Implementation Files + 3 Documentation Files with dedicated signal dimensions
-    # Dim 0: GitHub Auth
-    # Dim 1: Tree-sitter Parser
-    # Dim 2: Embedding Generation
-    # Dim 3: Hybrid Retrieval
-    # Dim 4: Incremental Differ
-    # Dim 5: Ingestion Worker
-    # Dim 6: Project Deletion / Service
-    # Dim 7: JWT Security Auth
-    # Dim 8: GitHub Repositories Fetch
-    # Dim 9: Atomic Index Promotion Engine
-    # Dim 10-12: Architecture, Decisions, Roadmap docs
-
-    entries = [
+    entries: list[dict[str, Any]] = [
         # Query 1: GitHub Auth
         {
             "path": "backend/app/services/github/auth.py",
@@ -210,18 +199,21 @@ async def indexed_forgeai_multi_domain_repo(db_session, test_user: User):
     ]
 
     for entry in entries:
-        ext = ".md" if entry["path"].endswith(".md") else ".py"
+        file_path_str = str(entry["path"])
+        file_name_str = str(entry["name"])
+        content_str = str(entry["content"])
+        ext = ".md" if file_path_str.endswith(".md") else ".py"
         lang = "markdown" if ext == ".md" else "python"
 
         db_file = RepositoryFile(
             index_version_id=index_version.id,
             repository_id=repo.id,
-            file_path=entry["path"],
-            file_name=entry["name"],
+            file_path=file_path_str,
+            file_name=file_name_str,
             extension=ext,
             language=lang,
-            size_bytes=len(entry["content"]),
-            content_hash=f"hash_{entry['name']}",
+            size_bytes=len(content_str),
+            content_hash=f"hash_{file_name_str}",
             is_binary=False,
         )
         db_session.add(db_file)
@@ -233,19 +225,20 @@ async def indexed_forgeai_multi_domain_repo(db_session, test_user: User):
             repository_id=repo.id,
             chunk_index=0,
             chunk_type=entry["chunk_type"],
-            symbol_name=entry["symbol"],
+            symbol_name=str(entry["symbol"]),
             start_line=1,
             end_line=15,
-            content=entry["content"],
-            context_header=entry["header"],
+            content=content_str,
+            context_header=str(entry["header"]),
             token_count=40,
         )
         db_session.add(db_chunk)
         await db_session.flush()
 
         # Build 768-dim vector with signal at index `entry['dim']`
+        dim_idx = int(entry["dim"])
         full_vector = [0.0] * 768
-        full_vector[entry["dim"]] = 1.0
+        full_vector[dim_idx] = 1.0
 
         db_emb = ChunkEmbedding(
             chunk_id=db_chunk.id,
@@ -280,7 +273,7 @@ async def test_10_query_retrieval_benchmark(
     """
     project = indexed_forgeai_multi_domain_repo["project"]
 
-    test_queries = [
+    test_queries: list[dict[str, Any]] = [
         {
             "query": "Where is GitHub authentication implemented?",
             "dim": 0,
@@ -350,8 +343,13 @@ async def test_10_query_retrieval_benchmark(
     benchmark_log = []
 
     for tq in test_queries:
+        query_str = str(tq["query"])
+        dim_idx = int(tq["dim"])
+        expected_target_str = str(tq["expected_target"])
+        expected_symbol_str = str(tq["expected_symbol"])
+
         query_vec = [0.0] * 768
-        query_vec[tq["dim"]] = 1.0
+        query_vec[dim_idx] = 1.0
 
         with patch(
             "app.services.embedding.gemini.GeminiEmbeddingProvider.embed_query",
@@ -360,20 +358,20 @@ async def test_10_query_retrieval_benchmark(
         ):
             results = await HybridSearchEngine.search(
                 project_id=project.id,
-                query=tq["query"],
+                query=query_str,
                 top_k=5,
                 session_override=db_session,
             )
 
-            assert len(results) > 0, f"Query '{tq['query']}' returned no results"
+            assert len(results) > 0, f"Query '{query_str}' returned no results"
 
             top_1 = results[0]
             top_3_files = [r.file_path for r in results[:3]]
             top_3_symbols = [r.symbol_name for r in results[:3]]
 
-            is_hit_1 = tq["expected_target"] in top_1.file_path or top_1.symbol_name == tq["expected_symbol"]
-            is_hit_3 = any(tq["expected_target"] in f for f in top_3_files) or (
-                tq["expected_symbol"] in top_3_symbols
+            is_hit_1 = expected_target_str in top_1.file_path or top_1.symbol_name == expected_symbol_str
+            is_hit_3 = any(expected_target_str in f for f in top_3_files) or (
+                expected_symbol_str in top_3_symbols
             )
 
             if is_hit_1:

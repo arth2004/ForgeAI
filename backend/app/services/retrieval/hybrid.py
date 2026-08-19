@@ -3,6 +3,7 @@ import math
 import re
 import uuid
 from dataclasses import dataclass
+from typing import Any, cast
 
 from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -350,15 +351,15 @@ class HybridSearchEngine:
 
                 if is_sqlite:
                     # SQLite fallback: filter in memory
-                    chunks_stmt = (
+                    c_rows_stmt = (
                         select(CodeChunk.id, CodeChunk.symbol_name, CodeChunk.chunk_type, RepositoryFile.file_path)
                         .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
                         .where(CodeChunk.index_version_id.in_(active_version_ids))
                     )
-                    c_rows = (await session.execute(chunks_stmt)).all()
+                    c_rows = (await session.execute(c_rows_stmt)).all()
                     scored_matches = []
                     for cid, sym, _ctype, fpath in c_rows:
-                        score = 0
+                        match_score = 0
                         sym_l = (sym or "").lower()
                         fpath_l = (fpath or "").lower()
                         for term in all_search_terms:
@@ -367,32 +368,31 @@ class HybridSearchEngine:
                             weight_mult = 1.0 if is_primary else 0.75
 
                             if sym_l == t:
-                                score += int(220 * weight_mult)
+                                match_score += int(220 * weight_mult)
                             elif sym_l.startswith(t):
-                                score += int(120 * weight_mult)
+                                match_score += int(120 * weight_mult)
                             elif sym_l.endswith(t):
-                                score += int(100 * weight_mult)
+                                match_score += int(100 * weight_mult)
                             elif t in sym_l:
-                                score += int(60 * weight_mult)
+                                match_score += int(60 * weight_mult)
 
                             if t not in GENERIC_FILENAMES:
                                 if f"/{t}." in fpath_l:
-                                    score += int(160 * weight_mult)
+                                    match_score += int(160 * weight_mult)
                                 elif f"/{t}_" in fpath_l or f"_{t}." in fpath_l:
-                                    score += int(90 * weight_mult)
+                                    match_score += int(90 * weight_mult)
                                 elif f"/{t}/" in fpath_l:
-                                    score += int(80 * weight_mult)
+                                    match_score += int(80 * weight_mult)
                                 elif t in fpath_l:
-                                    score += int(25 * weight_mult)
+                                    match_score += int(25 * weight_mult)
 
-
-                        if score > 0:
-                            scored_matches.append((cid, score))
+                        if match_score > 0:
+                            scored_matches.append((cid, match_score))
                     scored_matches.sort(key=lambda x: x[1], reverse=True)
                     for rank_idx, (cid, _) in enumerate(scored_matches[:60]):
                         symbol_ranks[cid] = rank_idx + 1
                 else:
-                    total_match_score = sum(score_exprs).label("total_match_score")
+                    total_match_score = cast(Any, sum(score_exprs)).label("total_match_score")
                     symbol_stmt = (
                         select(CodeChunk.id, total_match_score)
                         .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
@@ -425,13 +425,13 @@ class HybridSearchEngine:
 
             rrf_scores: dict[uuid.UUID, float] = {}
             for chunk_id in all_chunk_ids:
-                score = 0.0
+                rrf_calc: float = 0.0
                 if chunk_id in dense_ranks:
-                    score += dense_weight / (rrf_k + dense_ranks[chunk_id])
+                    rrf_calc += float(dense_weight) / (rrf_k + dense_ranks[chunk_id])
                 if chunk_id in sparse_ranks:
-                    score += sparse_weight / (rrf_k + sparse_ranks[chunk_id])
+                    rrf_calc += float(sparse_weight) / (rrf_k + sparse_ranks[chunk_id])
                 if chunk_id in symbol_ranks:
-                    score += symbol_weight / (rrf_k + symbol_ranks[chunk_id])
+                    rrf_calc += float(symbol_weight) / (rrf_k + symbol_ranks[chunk_id])
 
                 ctype, fpath, sname = chunk_meta.get(chunk_id, (None, "", None))
                 is_code_file = any(fpath.endswith(ext) for ext in CODE_EXTENSIONS)
@@ -450,17 +450,17 @@ class HybridSearchEngine:
                         s_rank = symbol_ranks.get(chunk_id)
                         if s_rank and s_rank <= 5:
                             # High-confidence exact declaration match
-                            score *= 1.8
+                            rrf_calc *= 1.8
                         else:
-                            score *= 1.4
+                            rrf_calc *= 1.4
                     elif is_code_file:
                         # Top-level code module or block
-                        score *= 1.15
+                        rrf_calc *= 1.15
                     elif not is_code_file:
                         # Documentation markdown file
-                        score *= 0.70
+                        rrf_calc *= 0.70
 
-                rrf_scores[chunk_id] = score
+                rrf_scores[chunk_id] = rrf_calc
 
             # Sort top chunk IDs by RRF score descending
             sorted_chunk_ids = sorted(
@@ -468,7 +468,7 @@ class HybridSearchEngine:
             )[:top_k]
 
             # 6. Retrieve detailed Chunk records with file and commit lineage
-            chunks_stmt = (
+            detailed_chunks_stmt = (
                 select(CodeChunk)
                 .where(CodeChunk.id.in_(sorted_chunk_ids))
                 .options(
@@ -478,39 +478,39 @@ class HybridSearchEngine:
                     ),
                 )
             )
-            chunks_res = await session.execute(chunks_stmt)
-            chunk_records = {c.id: c for c in chunks_res.scalars().all()}
+            chunks_res = await session.execute(detailed_chunks_stmt)
+            chunk_records: dict[uuid.UUID, CodeChunk] = {c.id: c for c in chunks_res.scalars().all()}
 
             results: list[RetrievedEvidenceChunk] = []
             for cid in sorted_chunk_ids:
-                c = chunk_records.get(cid)
-                if not c:
+                chunk_obj = chunk_records.get(cid)
+                if not chunk_obj:
                     continue
 
-                ver = version_map.get(c.index_version_id)
+                ver = version_map.get(chunk_obj.index_version_id)
                 commit_sha = ver.commit_sha if ver else ""
                 branch_name = ver.branch.name if ver and ver.branch else ""
 
                 results.append(
                     RetrievedEvidenceChunk(
-                        chunk_id=c.id,
-                        file_path=c.file.file_path if c.file else "",
-                        start_line=c.start_line,
-                        end_line=c.end_line,
-                        symbol_name=c.symbol_name,
-                        chunk_type=c.chunk_type.value
-                        if hasattr(c.chunk_type, "value")
-                        else str(c.chunk_type),
-                        context_header=c.context_header,
-                        content=c.content,
+                        chunk_id=chunk_obj.id,
+                        file_path=chunk_obj.file.file_path if chunk_obj.file else "",
+                        start_line=chunk_obj.start_line,
+                        end_line=chunk_obj.end_line,
+                        symbol_name=chunk_obj.symbol_name,
+                        chunk_type=chunk_obj.chunk_type.value
+                        if hasattr(chunk_obj.chunk_type, "value")
+                        else str(chunk_obj.chunk_type),
+                        context_header=chunk_obj.context_header,
+                        content=chunk_obj.content,
                         rrf_score=rrf_scores[cid],
                         dense_rank=dense_ranks.get(cid),
                         sparse_rank=sparse_ranks.get(cid),
                         symbol_rank=symbol_ranks.get(cid),
                         commit_sha=commit_sha,
                         branch_name=branch_name,
-                        index_version_id=c.index_version_id,
-                        repository_id=c.repository_id,
+                        index_version_id=chunk_obj.index_version_id,
+                        repository_id=chunk_obj.repository_id,
                     )
                 )
 
