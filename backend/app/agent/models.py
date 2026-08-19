@@ -1,5 +1,6 @@
 import logging
 import re
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -50,18 +51,21 @@ class MockChatModelProvider(BaseChatModelProvider):
 
     def __init__(
         self,
-        default_response: str = "Mock agent reasoning completed.",
+        default_response: str | AIMessage = "Mock agent reasoning completed.",
         model_name: str = "mock-model",
         temperature: float = 0.0,
         max_tokens: int | None = 1000,
         should_fail: bool = False,
         failure_message: str = "Simulated model provider failure.",
+        responses: list[AIMessage | str] | None = None,
     ):
         super().__init__(model_name=model_name, temperature=temperature, max_tokens=max_tokens)
         self.default_response = default_response
         self.should_fail = should_fail
         self.failure_message = failure_message
         self.call_history: list[list[BaseMessage]] = []
+        self._responses: list[AIMessage | str] = list(responses) if responses is not None else []
+        self._response_idx: int = 0
 
     @property
     def provider_name(self) -> str:
@@ -75,9 +79,31 @@ class MockChatModelProvider(BaseChatModelProvider):
                 provider=self.provider_name,
             )
 
+        if self._responses and self._response_idx < len(self._responses):
+            resp = self._responses[self._response_idx]
+            self._response_idx += 1
+            if isinstance(resp, str):
+                return AIMessage(content=resp, id=str(uuid.uuid4()))
+            if isinstance(resp, AIMessage):
+                return AIMessage(
+                    content=resp.content,
+                    tool_calls=list(resp.tool_calls) if resp.tool_calls else [],
+                    id=str(uuid.uuid4()),
+                )
+            return resp
+
         custom_response = kwargs.get("response_override")
-        content = custom_response if custom_response is not None else self.default_response
-        return AIMessage(content=content)
+        if custom_response is not None:
+            if isinstance(custom_response, str):
+                return AIMessage(content=custom_response, id=str(uuid.uuid4()))
+            return custom_response
+        if isinstance(self.default_response, AIMessage):
+            return AIMessage(
+                content=self.default_response.content,
+                tool_calls=list(self.default_response.tool_calls) if self.default_response.tool_calls else [],
+                id=str(uuid.uuid4()),
+            )
+        return AIMessage(content=self.default_response, id=str(uuid.uuid4()))
 
 
 class GeminiChatModelProvider(BaseChatModelProvider):

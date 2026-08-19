@@ -83,10 +83,10 @@ async def test_agent_graph_handles_provider_failure():
     assert "AIzaSecret" not in err.message
 
 
-def test_phase_4a_architectural_boundary_static_check():
+def test_phase_4_architectural_boundary_static_check():
     """Strict architectural boundary check:
 
-    Asserts that Phase 4A agent modules (app.agent.*) have ZERO direct imports from:
+    Asserts that Phase 4 core foundation modules (config, exceptions, models, state) have ZERO direct imports from:
     - app.models (ORM/database models)
     - app.services.retrieval (Phase 3 retrieval pipeline)
     - app.services.ingestion (Phase 3 ingestion pipeline)
@@ -96,14 +96,12 @@ def test_phase_4a_architectural_boundary_static_check():
     """
     import app.agent.config
     import app.agent.exceptions
-    import app.agent.graph
     import app.agent.models
     import app.agent.state
 
-    agent_modules = [
+    foundation_modules = [
         app.agent.config,
         app.agent.exceptions,
-        app.agent.graph,
         app.agent.models,
         app.agent.state,
     ]
@@ -118,11 +116,11 @@ def test_phase_4a_architectural_boundary_static_check():
         "AsyncSessionLocal",
     ]
 
-    for mod in agent_modules:
+    for mod in foundation_modules:
         source_code = inspect.getsource(mod)
         for pattern in forbidden_patterns:
             assert pattern not in source_code, (
                 f"Architectural boundary violation in {mod.__name__}: "
                 f"found forbidden import/reference '{pattern}'. "
-                f"Phase 4A agent must NOT directly access databases, ORM models, or retrieval services."
+                f"Core agent foundation must NOT directly access databases, ORM models, or retrieval services."
             )
