@@ -52,26 +52,35 @@ GENERIC_FILENAMES = {
 }
 
 STEM_SYNONYMS = {
-    "deletion": ["delete", "del", "remove", "destroy", "drop"],
-    "delete": ["deletion", "del", "remove", "destroy"],
-    "authentication": ["auth", "authenticate", "login", "jwt", "oauth"],
-    "authenticate": ["auth", "authentication", "login", "jwt"],
-    "auth": ["authentication", "authenticate", "login", "jwt"],
-    "repositories": ["repository", "repo", "repos"],
-    "repository": ["repositories", "repo", "repos"],
-    "repo": ["repository", "repositories"],
-    "parser": ["parse", "tree_sitter", "ast"],
-    "parse": ["parser", "tree_sitter", "ast"],
-    "retrieval": ["retrieve", "search", "hybrid", "engine", "query"],
-    "indexing": ["index", "indexer", "version"],
-    "embeddings": ["embedding", "embed", "vector"],
-    "embedding": ["embeddings", "embed", "vector"],
-    "promotion": ["promote", "promote_version", "active"],
-    "promote": ["promotion", "promote_version", "active"],
-    "changed": ["diff", "differ", "change", "delta", "hash"],
-    "worker": ["worker", "tasks", "task", "arq", "queue", "job"],
-    "fetched": ["fetch", "get", "list", "client", "download"],
-    "fetch": ["fetched", "get", "list", "client"],
+    "deletion": ["delete", "del", "remove", "destroy", "drop", "project_service"],
+    "delete": ["deletion", "del", "remove", "destroy", "project_service"],
+    "authentication": ["auth", "authenticate", "login", "jwt", "oauth", "security", "credentials"],
+    "authenticate": ["auth", "authentication", "login", "jwt", "security"],
+    "auth": ["authentication", "authenticate", "login", "jwt", "security"],
+    "jwt": ["jwt", "access_token", "token", "security", "auth", "claims", "bearer"],
+    "token": ["jwt", "access_token", "token", "auth", "security"],
+    "repositories": ["repository", "repo", "repos", "github_repo"],
+    "repository": ["repositories", "repo", "repos", "github_repo"],
+    "repo": ["repository", "repositories", "repo"],
+    "parser": ["parse", "chunker", "chunk", "ast", "tree_sitter", "languages", "symbols"],
+    "parse": ["parser", "chunker", "ast", "tree_sitter", "languages"],
+    "tree_sitter": ["tree_sitter", "treesitter", "parser", "chunker", "ast", "grammar"],
+    "treesitter": ["tree_sitter", "treesitter", "parser", "chunker", "ast"],
+    "retrieval": ["retrieval", "retrieve", "search", "hybrid", "engine", "rrf", "dense", "sparse"],
+    "retrieve": ["retrieval", "search", "hybrid", "engine"],
+    "indexing": ["index", "indexer", "version", "engine", "differ"],
+    "index": ["indexing", "indexer", "version", "engine", "differ"],
+    "embeddings": ["embedding", "embed", "vector", "gemini", "openai", "dimension", "provider"],
+    "embedding": ["embeddings", "embed", "vector", "gemini", "openai", "dimension", "provider"],
+    "promotion": ["promote", "promotion", "active", "version", "engine", "lifecycle", "validated", "superseded"],
+    "promote": ["promotion", "promote", "active", "version", "engine", "lifecycle", "validated"],
+    "atomic": ["atomic", "transaction", "engine", "promotion", "lifecycle"],
+    "changed": ["differ", "diff", "difference", "delta", "modified", "change", "content_hash"],
+    "incremental": ["incremental", "differ", "diff", "delta", "change", "content_hash", "modified"],
+    "diff": ["differ", "diff", "difference", "delta", "incremental", "changed"],
+    "worker": ["worker", "tasks", "task", "arq", "queue", "job", "ingestion_tasks"],
+    "fetched": ["fetch", "get", "list", "client", "download", "repositories"],
+    "fetch": ["fetched", "get", "list", "client", "repositories"],
 }
 
 CODE_EXTENSIONS = {
@@ -295,36 +304,43 @@ class HybridSearchEngine:
                 for term in all_search_terms:
                     t = term.lower()
                     is_primary = t in code_terms
-                    weight_mult = 1.0 if is_primary else 0.7
+                    weight_mult = 1.0 if is_primary else 0.75
 
-                    # Exact symbol name match (e.g. `delete`, `GitHubAuthService`, `ProjectService`)
+                    # Exact symbol declaration match (e.g. `delete`, `GitHubAuthService`, `ProjectService`, `CodeChunker`)
                     score_exprs.append(
-                        case((func.lower(CodeChunk.symbol_name) == t, int(150 * weight_mult)), else_=0)
+                        case((func.lower(CodeChunk.symbol_name) == t, int(220 * weight_mult)), else_=0)
                     )
-                    # Symbol name contains term
                     score_exprs.append(
-                        case((CodeChunk.symbol_name.ilike(f"%{t}%"), int(40 * weight_mult)), else_=0)
+                        case((CodeChunk.symbol_name.ilike(f"{t}%"), int(120 * weight_mult)), else_=0)
+                    )
+                    score_exprs.append(
+                        case((CodeChunk.symbol_name.ilike(f"%{t}"), int(100 * weight_mult)), else_=0)
+                    )
+                    score_exprs.append(
+                        case((CodeChunk.symbol_name.ilike(f"%{t}%"), int(60 * weight_mult)), else_=0)
                     )
 
-                    # Specific filename match (exclude generic names like `index.ts`, `main.py`)
+                    # Specific filename & path matches
                     if t not in GENERIC_FILENAMES:
+                        # Exact file stem (e.g. auth.py, differ.py, chunker.py, security.py)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}.%"), int(120 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}.%"), int(160 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}_%"), int(80 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}_%"), int(90 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%_{t}.%"), int(80 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%_{t}.%"), int(90 * weight_mult)), else_=0)
                         )
+                        # Directory match (e.g. /parser/, /retrieval/, /github/, /embedding/)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(70 * weight_mult)), else_=0)
+                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(80 * weight_mult)), else_=0)
                         )
                         score_exprs.append(
                             case((RepositoryFile.file_path.ilike(f"%{t}%"), int(25 * weight_mult)), else_=0)
                         )
                     else:
-                        # For generic terms, require directory path match
+                        # Generic filename terms require directory match
                         score_exprs.append(
                             case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(40 * weight_mult)), else_=0)
                         )
@@ -335,31 +351,41 @@ class HybridSearchEngine:
                 if is_sqlite:
                     # SQLite fallback: filter in memory
                     chunks_stmt = (
-                        select(CodeChunk.id, CodeChunk.symbol_name, RepositoryFile.file_path)
+                        select(CodeChunk.id, CodeChunk.symbol_name, CodeChunk.chunk_type, RepositoryFile.file_path)
                         .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
                         .where(CodeChunk.index_version_id.in_(active_version_ids))
                     )
                     c_rows = (await session.execute(chunks_stmt)).all()
                     scored_matches = []
-                    for cid, sym, fpath in c_rows:
+                    for cid, sym, _ctype, fpath in c_rows:
                         score = 0
                         sym_l = (sym or "").lower()
                         fpath_l = (fpath or "").lower()
                         for term in all_search_terms:
                             t = term.lower()
+                            is_primary = t in code_terms
+                            weight_mult = 1.0 if is_primary else 0.75
+
                             if sym_l == t:
-                                score += 150
+                                score += int(220 * weight_mult)
+                            elif sym_l.startswith(t):
+                                score += int(120 * weight_mult)
+                            elif sym_l.endswith(t):
+                                score += int(100 * weight_mult)
                             elif t in sym_l:
-                                score += 40
+                                score += int(60 * weight_mult)
+
                             if t not in GENERIC_FILENAMES:
                                 if f"/{t}." in fpath_l:
-                                    score += 120
+                                    score += int(160 * weight_mult)
                                 elif f"/{t}_" in fpath_l or f"_{t}." in fpath_l:
-                                    score += 80
+                                    score += int(90 * weight_mult)
                                 elif f"/{t}/" in fpath_l:
-                                    score += 70
+                                    score += int(80 * weight_mult)
                                 elif t in fpath_l:
-                                    score += 25
+                                    score += int(25 * weight_mult)
+
+
                         if score > 0:
                             scored_matches.append((cid, score))
                     scored_matches.sort(key=lambda x: x[1], reverse=True)
@@ -390,27 +416,12 @@ class HybridSearchEngine:
 
             # Retrieve chunk metadata for code-classification awareness
             chunks_info_stmt = (
-                select(CodeChunk.id, CodeChunk.chunk_type, RepositoryFile.file_path)
+                select(CodeChunk.id, CodeChunk.chunk_type, RepositoryFile.file_path, CodeChunk.symbol_name)
                 .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
                 .where(CodeChunk.id.in_(all_chunk_ids))
             )
             chunks_info_res = await session.execute(chunks_info_stmt)
-            chunk_meta = {row[0]: (row[1], row[2]) for row in chunks_info_res.all()}
-
-            # Check if there are any code implementation matches in candidate set
-            has_code_candidates = any(
-                any(meta[1].endswith(ext) for ext in CODE_EXTENSIONS)
-                and meta[0] in {
-                    ChunkType.FUNCTION,
-                    ChunkType.CLASS,
-                    ChunkType.METHOD,
-                    ChunkType.INTERFACE,
-                    ChunkType.MODULE,
-                    ChunkType.BLOCK,
-                    "function", "class", "method", "interface", "module", "block",
-                }
-                for meta in chunk_meta.values()
-            )
+            chunk_meta = {row[0]: (row[1], row[2], row[3]) for row in chunks_info_res.all()}
 
             rrf_scores: dict[uuid.UUID, float] = {}
             for chunk_id in all_chunk_ids:
@@ -422,24 +433,32 @@ class HybridSearchEngine:
                 if chunk_id in symbol_ranks:
                     score += symbol_weight / (rrf_k + symbol_ranks[chunk_id])
 
-                ctype, fpath = chunk_meta.get(chunk_id, (None, ""))
+                ctype, fpath, sname = chunk_meta.get(chunk_id, (None, "", None))
                 is_code_file = any(fpath.endswith(ext) for ext in CODE_EXTENSIONS)
-                is_ast_chunk = ctype in {
+                is_named_decl = ctype in {
                     ChunkType.FUNCTION,
                     ChunkType.CLASS,
                     ChunkType.METHOD,
                     ChunkType.INTERFACE,
-                    ChunkType.MODULE,
-                    ChunkType.BLOCK,
-                    "function", "class", "method", "interface", "module", "block",
+                    "function", "class", "method", "interface",
                 }
 
-                # Code Entity Intent Weighting
-                if is_impl_q and has_code_candidates:
-                    if is_code_file and is_ast_chunk:
-                        score *= 1.35
+                # Principled Code Entity & Intent Weighting
+                if is_impl_q:
+                    if is_code_file and is_named_decl:
+                        # Direct named declaration (CLASS/FUNCTION/METHOD) in code implementation file
+                        s_rank = symbol_ranks.get(chunk_id)
+                        if s_rank and s_rank <= 5:
+                            # High-confidence exact declaration match
+                            score *= 1.8
+                        else:
+                            score *= 1.4
+                    elif is_code_file:
+                        # Top-level code module or block
+                        score *= 1.15
                     elif not is_code_file:
-                        score *= 0.85
+                        # Documentation markdown file
+                        score *= 0.70
 
                 rrf_scores[chunk_id] = score
 

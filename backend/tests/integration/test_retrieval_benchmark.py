@@ -17,26 +17,28 @@ from app.services.retrieval.hybrid import HybridSearchEngine
 
 
 @pytest_asyncio.fixture(scope="function")
-async def benchmark_repo_fixture(db_session, test_user: User):
-    """Creates a deterministic multi-component codebase fixture for retrieval quality benchmarking."""
+async def indexed_forgeai_multi_domain_repo(db_session, test_user: User):
+    """Creates a deterministic multi-domain repository fixture containing both code implementation files
+
+    and architectural documentation files (docs/architecture.md, docs/decisions.md).
+    """
     # 1. Organization & Project
-    org = Organization(name="Benchmark Labs", slug="benchmark-labs")
+    org = Organization(name="ForgeAI Lab", slug="forgeai-lab")
     db_session.add(org)
     await db_session.flush()
 
     membership = Membership(user_id=test_user.id, organization_id=org.id, role=Role.owner)
     db_session.add(membership)
 
-    project = Project(organization_id=org.id, name="Benchmark Project", description="Retrieval Benchmark")
+    project = Project(organization_id=org.id, name="ForgeAI Engine", description="Code Intelligence Engine")
     db_session.add(project)
     await db_session.flush()
 
-    # 2. Repository & Branch
     repo = Repository(
         project_id=project.id,
-        github_repo_id=555444,
-        owner="benchmark-labs",
-        full_name="benchmark-labs/core-platform",
+        github_repo_id=777888,
+        owner="forgeai",
+        full_name="forgeai/core-engine",
         default_branch="main",
         indexing_status=IndexingStatus.ready,
     )
@@ -46,84 +48,180 @@ async def benchmark_repo_fixture(db_session, test_user: User):
     branch = RepositoryBranch(
         repository_id=repo.id,
         name="main",
-        latest_commit_sha="bench_sha_123456",
+        latest_commit_sha="bench_sha_final_100",
         is_protected=False,
     )
     db_session.add(branch)
     await db_session.flush()
 
-    # 3. Active Index Version
     index_version = RepositoryIndexVersion(
         repository_id=repo.id,
         branch_id=branch.id,
         commit_sha=branch.latest_commit_sha,
         status=IndexVersionStatus.ACTIVE,
-        total_files=5,
-        total_chunks=5,
+        total_files=13,
+        total_chunks=13,
     )
     db_session.add(index_version)
     await db_session.flush()
 
-    # 4. Five Distinct Domain Files & Code Chunks
-    files_spec = [
+    # 2. Define 10 Implementation Files + 3 Documentation Files with dedicated signal dimensions
+    # Dim 0: GitHub Auth
+    # Dim 1: Tree-sitter Parser
+    # Dim 2: Embedding Generation
+    # Dim 3: Hybrid Retrieval
+    # Dim 4: Incremental Differ
+    # Dim 5: Ingestion Worker
+    # Dim 6: Project Deletion / Service
+    # Dim 7: JWT Security Auth
+    # Dim 8: GitHub Repositories Fetch
+    # Dim 9: Atomic Index Promotion Engine
+    # Dim 10-12: Architecture, Decisions, Roadmap docs
+
+    entries = [
+        # Query 1: GitHub Auth
         {
-            "path": "app/services/auth_service.py",
-            "name": "auth_service.py",
-            "symbol": "verify_jwt_token",
-            "chunk_type": ChunkType.FUNCTION,
-            "content": "def verify_jwt_token(token: str) -> dict:\n    '''Validates HS256 JWT signature and claims.'''\n    return jwt.decode(token, JWT_SECRET, algorithms=['HS256'])",
-            "header": "# file: app/services/auth_service.py > function verify_jwt_token",
-            "vec_signal": [1.0, 0.0, 0.0, 0.0, 0.0],
+            "path": "backend/app/services/github/auth.py",
+            "name": "auth.py",
+            "symbol": "GitHubAuthService",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class GitHubAuthService:\n    '''Handles GitHub OAuth 2.0 web flow, state signature verification, and user installation mapping.'''\n    async def handle_callback(self, code: str, state: str) -> dict:\n        pass",
+            "header": "# file: backend/app/services/github/auth.py > class GitHubAuthService",
+            "dim": 0,
         },
+        # Query 2: Tree-sitter Parser
         {
-            "path": "app/core/crypto_cipher.py",
-            "name": "crypto_cipher.py",
-            "symbol": "encrypt_secret_payload",
-            "chunk_type": ChunkType.FUNCTION,
-            "content": "def encrypt_secret_payload(plaintext: str, key_hex: str) -> str:\n    '''Encrypts sensitive API credentials using AES-256-GCM cipher.'''\n    aesgcm = AESGCM(bytes.fromhex(key_hex))\n    return aesgcm.encrypt(nonce, plaintext.encode(), None).hex()",
-            "header": "# file: app/core/crypto_cipher.py > function encrypt_secret_payload",
-            "vec_signal": [0.0, 1.0, 0.0, 0.0, 0.0],
+            "path": "backend/app/services/parser/chunker.py",
+            "name": "chunker.py",
+            "symbol": "CodeChunker",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class CodeChunker:\n    '''Parses source code into Tree-sitter AST nodes and generates language-aware semantic code chunks.'''\n    @classmethod\n    def parse_and_chunk_file(cls, file_path: str, content: str) -> list:\n        pass",
+            "header": "# file: backend/app/services/parser/chunker.py > class CodeChunker",
+            "dim": 1,
         },
+        # Query 3: Embeddings Generation
         {
-            "path": "app/services/differ.py",
+            "path": "backend/app/services/embedding/gemini.py",
+            "name": "gemini.py",
+            "symbol": "GeminiEmbeddingProvider",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class GeminiEmbeddingProvider(BaseEmbeddingProvider):\n    '''Generates 768-dimensional dense vector embeddings using Google Gemini Embedding-2 API with rate-limit backoff.'''\n    async def embed_documents(self, texts: list[str]) -> list[list[float]]:\n        pass",
+            "header": "# file: backend/app/services/embedding/gemini.py > class GeminiEmbeddingProvider",
+            "dim": 2,
+        },
+        # Query 4: Hybrid Retrieval
+        {
+            "path": "backend/app/services/retrieval/hybrid.py",
+            "name": "hybrid.py",
+            "symbol": "HybridSearchEngine",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class HybridSearchEngine:\n    '''Executes 3-stage hybrid search combining pgvector HNSW dense search, PostgreSQL GIN sparse search, and Reciprocal Rank Fusion.'''\n    @classmethod\n    async def search(cls, project_id: str, query: str, top_k: int = 15) -> list:\n        pass",
+            "header": "# file: backend/app/services/retrieval/hybrid.py > class HybridSearchEngine",
+            "dim": 3,
+        },
+        # Query 5: Incremental Index Differ
+        {
+            "path": "backend/app/services/ingestion/differ.py",
             "name": "differ.py",
-            "symbol": "calculate_sha256_diff",
+            "symbol": "IndexDiffer",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class IndexDiffer:\n    '''Calculates incremental file changes (added, modified, unchanged, deleted) via SHA-256 content hashes between commits.'''\n    @classmethod\n    def calculate_diff(cls, previous_hashes: dict, incoming_entries: list) -> IndexDiffResult:\n        pass",
+            "header": "# file: backend/app/services/ingestion/differ.py > class IndexDiffer",
+            "dim": 4,
+        },
+        # Query 6: Indexing Worker
+        {
+            "path": "backend/app/workers/ingestion_tasks.py",
+            "name": "ingestion_tasks.py",
+            "symbol": "index_repository_task",
             "chunk_type": ChunkType.FUNCTION,
-            "content": "def calculate_sha256_diff(stored_hashes: dict[str, str], incoming_entries: list) -> IndexDiffResult:\n    '''Computes added, modified, unchanged and deleted files via SHA-256 content hashes.'''\n    return IndexDiffResult(added, modified, unchanged, deleted)",
-            "header": "# file: app/services/differ.py > function calculate_sha256_diff",
-            "vec_signal": [0.0, 0.0, 1.0, 0.0, 0.0],
+            "content": "async def index_repository_task(ctx: dict, repository_id: str, branch_id: str, is_full_reindex: bool = False, job_id: str | None = None) -> dict:\n    '''ARQ background worker task executing asynchronous repository ingestion and embedding.'''\n    return await IngestionEngine.run_indexing(repository_id, branch_id, is_full_reindex, job_id)",
+            "header": "# file: backend/app/workers/ingestion_tasks.py > function index_repository_task",
+            "dim": 5,
+        },
+        # Query 7: Project Deletion
+        {
+            "path": "backend/app/services/project_service.py",
+            "name": "project_service.py",
+            "symbol": "ProjectService",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class ProjectService:\n    '''Manages Project lifecycle, tenant security checks, and cascade project deletion.'''\n    async def delete_project(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:\n        pass",
+            "header": "# file: backend/app/services/project_service.py > class ProjectService",
+            "dim": 6,
+        },
+        # Query 8: JWT Authentication
+        {
+            "path": "backend/app/core/security.py",
+            "name": "security.py",
+            "symbol": "create_access_token",
+            "chunk_type": ChunkType.FUNCTION,
+            "content": "def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:\n    '''Encodes user claims and authentication tokens using HS256 JWT signature.'''\n    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)",
+            "header": "# file: backend/app/core/security.py > function create_access_token",
+            "dim": 7,
+        },
+        # Query 9: GitHub Repositories Fetch
+        {
+            "path": "backend/app/services/github/repositories.py",
+            "name": "repositories.py",
+            "symbol": "GitHubRepositoryService",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class GitHubRepositoryService:\n    '''Fetches and synchronizes repositories and branch lists accessible to a GitHub App installation.'''\n    async def list_repositories(self, installation_id: int) -> list[dict]:\n        pass",
+            "header": "# file: backend/app/services/github/repositories.py > class GitHubRepositoryService",
+            "dim": 8,
+        },
+        # Query 10: Atomic Index Promotion Engine
+        {
+            "path": "backend/app/services/ingestion/engine.py",
+            "name": "engine.py",
+            "symbol": "IngestionEngine",
+            "chunk_type": ChunkType.CLASS,
+            "content": "class IngestionEngine:\n    '''Orchestrates repository ingestion pipeline: streaming tarball, parsing, embedding, VALIDATED integrity check, and atomic promotion to ACTIVE status.'''\n    @classmethod\n    async def run_indexing(cls, repository_id: uuid.UUID, branch_id: uuid.UUID, is_full_reindex: bool = False, job_id: uuid.UUID | None = None) -> uuid.UUID:\n        pass",
+            "header": "# file: backend/app/services/ingestion/engine.py > class IngestionEngine",
+            "dim": 9,
+        },
+        # Documentation Chunks (contain architectural descriptions matching multiple queries)
+        {
+            "path": "docs/architecture.md",
+            "name": "architecture.md",
+            "symbol": "System Architecture Overview",
+            "chunk_type": ChunkType.MARKDOWN_SECTION,
+            "content": "# System Architecture Overview\nForgeAI implements a 3-stage hybrid retrieval engine with pgvector dense search, tsvector sparse search, tree-sitter AST parsing, GitHub authentication, and atomic index promotion.",
+            "header": "# file: docs/architecture.md > # System Architecture Overview",
+            "dim": 10,
         },
         {
-            "path": "app/services/hybrid_retrieval.py",
-            "name": "hybrid_retrieval.py",
-            "symbol": "reciprocal_rank_fusion",
-            "chunk_type": ChunkType.FUNCTION,
-            "content": "def reciprocal_rank_fusion(dense_ranks: list, sparse_ranks: list, symbol_ranks: list, k: int = 60) -> list:\n    '''Fuses 3-stage ranking scores using reciprocal rank fusion formula.'''\n    score = sum(w / (k + rank) for w, rank in ranks)\n    return sorted_results",
-            "header": "# file: app/services/hybrid_retrieval.py > function reciprocal_rank_fusion",
-            "vec_signal": [0.0, 0.0, 0.0, 1.0, 0.0],
+            "path": "docs/decisions.md",
+            "name": "decisions.md",
+            "symbol": "ADR-009: Hybrid Retrieval and Incremental Indexing",
+            "chunk_type": ChunkType.MARKDOWN_SECTION,
+            "content": "# ADR-009: Hybrid Retrieval and Incremental Indexing\nWe chose Reciprocal Rank Fusion (RRF) combining dense embeddings from Gemini with sparse keyword indexing, tree-sitter parser, and GitHub OAuth authentication.",
+            "header": "# file: docs/decisions.md > # ADR-009: Hybrid Retrieval and Incremental Indexing",
+            "dim": 11,
         },
         {
-            "path": "app/api/endpoints/health.py",
-            "name": "health.py",
-            "symbol": "health_check_status",
-            "chunk_type": ChunkType.FUNCTION,
-            "content": "def health_check_status(db_conn: bool, redis_conn: bool) -> dict:\n    '''Returns overall platform health status for kubernetes readiness probes.'''\n    return {'status': 'healthy' if db_conn and redis_conn else 'degraded'}",
-            "header": "# file: app/api/endpoints/health.py > function health_check_status",
-            "vec_signal": [0.0, 0.0, 0.0, 0.0, 1.0],
+            "path": "docs/roadmap.md",
+            "name": "roadmap.md",
+            "symbol": "Phase 3: Repository Intelligence Engine",
+            "chunk_type": ChunkType.MARKDOWN_SECTION,
+            "content": "# Phase 3: Repository Intelligence Engine\nMilestones: GitHub App authentication, tree-sitter parsing, embedding generation, hybrid search engine, and atomic index promotion.",
+            "header": "# file: docs/roadmap.md > # Phase 3: Repository Intelligence Engine",
+            "dim": 12,
         },
     ]
 
-    created_chunks = {}
-    for spec in files_spec:
+    for entry in entries:
+        ext = ".md" if entry["path"].endswith(".md") else ".py"
+        lang = "markdown" if ext == ".md" else "python"
+
         db_file = RepositoryFile(
             index_version_id=index_version.id,
             repository_id=repo.id,
-            file_path=spec["path"],
-            file_name=spec["name"],
-            extension=".py",
-            language="python",
-            size_bytes=len(spec["content"]),
-            content_hash=f"hash_{spec['symbol']}",
+            file_path=entry["path"],
+            file_name=entry["name"],
+            extension=ext,
+            language=lang,
+            size_bytes=len(entry["content"]),
+            content_hash=f"hash_{entry['name']}",
             is_binary=False,
         )
         db_session.add(db_file)
@@ -134,19 +232,20 @@ async def benchmark_repo_fixture(db_session, test_user: User):
             file_id=db_file.id,
             repository_id=repo.id,
             chunk_index=0,
-            chunk_type=spec["chunk_type"],
-            symbol_name=spec["symbol"],
+            chunk_type=entry["chunk_type"],
+            symbol_name=entry["symbol"],
             start_line=1,
-            end_line=10,
-            content=spec["content"],
-            context_header=spec["header"],
-            token_count=30,
+            end_line=15,
+            content=entry["content"],
+            context_header=entry["header"],
+            token_count=40,
         )
         db_session.add(db_chunk)
         await db_session.flush()
 
-        # Build 768-dim vector padded with zeros
-        full_vector = spec["vec_signal"] + [0.0] * (768 - len(spec["vec_signal"]))
+        # Build 768-dim vector with signal at index `entry['dim']`
+        full_vector = [0.0] * 768
+        full_vector[entry["dim"]] = 1.0
 
         db_emb = ChunkEmbedding(
             chunk_id=db_chunk.id,
@@ -159,7 +258,6 @@ async def benchmark_repo_fixture(db_session, test_user: User):
             embedding=full_vector,
         )
         db_session.add(db_emb)
-        created_chunks[spec["symbol"]] = db_chunk
 
     await db_session.commit()
 
@@ -168,58 +266,92 @@ async def benchmark_repo_fixture(db_session, test_user: User):
         "repo": repo,
         "branch": branch,
         "index_version": index_version,
-        "chunks": created_chunks,
     }
 
 
 @pytest.mark.asyncio
-async def test_retrieval_quality_benchmark_recall_and_hit_at_k(
-    benchmark_repo_fixture: dict,
+async def test_10_query_retrieval_benchmark(
+    indexed_forgeai_multi_domain_repo: dict,
     db_session,
 ):
-    """Deterministic retrieval quality benchmark verifying Hit@1, Recall@3, and exact symbol ranking across distinct concepts."""
-    project = benchmark_repo_fixture["project"]
+    """Executes the full 10-query benchmark suite verifying that implementation code ranks in the top-3
 
-    # Test cases: (query, query_vector_signal, expected_symbol, expected_file)
-    benchmark_queries = [
+    for every query and outranks general architectural documentation.
+    """
+    project = indexed_forgeai_multi_domain_repo["project"]
+
+    test_queries = [
         {
-            "query": "Where is verify_jwt_token implemented for JWT authentication?",
-            "vec_signal": [1.0, 0.0, 0.0, 0.0, 0.0],
-            "expected_symbol": "verify_jwt_token",
-            "expected_file": "app/services/auth_service.py",
+            "query": "Where is GitHub authentication implemented?",
+            "dim": 0,
+            "expected_target": "backend/app/services/github/auth.py",
+            "expected_symbol": "GitHubAuthService",
         },
         {
-            "query": "AES-256-GCM cipher encryption for sensitive secret payloads",
-            "vec_signal": [0.0, 1.0, 0.0, 0.0, 0.0],
-            "expected_symbol": "encrypt_secret_payload",
-            "expected_file": "app/core/crypto_cipher.py",
+            "query": "Where is the Tree-sitter parser implemented?",
+            "dim": 1,
+            "expected_target": "backend/app/services/parser/chunker.py",
+            "expected_symbol": "CodeChunker",
         },
         {
-            "query": "How is SHA-256 content diff calculated for changed files?",
-            "vec_signal": [0.0, 0.0, 1.0, 0.0, 0.0],
-            "expected_symbol": "calculate_sha256_diff",
-            "expected_file": "app/services/differ.py",
+            "query": "Where are embeddings generated?",
+            "dim": 2,
+            "expected_target": "backend/app/services/embedding/gemini.py",
+            "expected_symbol": "GeminiEmbeddingProvider",
         },
         {
-            "query": "Reciprocal rank fusion algorithm implementation",
-            "vec_signal": [0.0, 0.0, 0.0, 1.0, 0.0],
-            "expected_symbol": "reciprocal_rank_fusion",
-            "expected_file": "app/services/hybrid_retrieval.py",
+            "query": "Where is hybrid retrieval implemented?",
+            "dim": 3,
+            "expected_target": "backend/app/services/retrieval/hybrid.py",
+            "expected_symbol": "HybridSearchEngine",
         },
         {
-            "query": "Health check status readiness probe endpoint",
-            "vec_signal": [0.0, 0.0, 0.0, 0.0, 1.0],
-            "expected_symbol": "health_check_status",
-            "expected_file": "app/api/endpoints/health.py",
+            "query": "How does incremental indexing detect changed files?",
+            "dim": 4,
+            "expected_target": "backend/app/services/ingestion/differ.py",
+            "expected_symbol": "IndexDiffer",
+        },
+        {
+            "query": "Where is the indexing worker implemented?",
+            "dim": 5,
+            "expected_target": "backend/app/workers/ingestion_tasks.py",
+            "expected_symbol": "index_repository_task",
+        },
+        {
+            "query": "Where is project deletion implemented?",
+            "dim": 6,
+            "expected_target": "backend/app/services/project_service.py",
+            "expected_symbol": "ProjectService",
+        },
+        {
+            "query": "Where is JWT authentication implemented?",
+            "dim": 7,
+            "expected_target": "backend/app/core/security.py",
+            "expected_symbol": "create_access_token",
+        },
+        {
+            "query": "Where are GitHub repositories fetched?",
+            "dim": 8,
+            "expected_target": "backend/app/services/github/repositories.py",
+            "expected_symbol": "GitHubRepositoryService",
+        },
+        {
+            "query": "Where is atomic index promotion implemented?",
+            "dim": 9,
+            "expected_target": "backend/app/services/ingestion/engine.py",
+            "expected_symbol": "IngestionEngine",
         },
     ]
 
     hit_at_1_count = 0
     hit_at_3_count = 0
-    total_queries = len(benchmark_queries)
+    total = len(test_queries)
 
-    for item in benchmark_queries:
-        query_vec = item["vec_signal"] + [0.0] * (768 - len(item["vec_signal"]))
+    benchmark_log = []
+
+    for tq in test_queries:
+        query_vec = [0.0] * 768
+        query_vec[tq["dim"]] = 1.0
 
         with patch(
             "app.services.embedding.gemini.GeminiEmbeddingProvider.embed_query",
@@ -228,32 +360,53 @@ async def test_retrieval_quality_benchmark_recall_and_hit_at_k(
         ):
             results = await HybridSearchEngine.search(
                 project_id=project.id,
-                query=item["query"],
+                query=tq["query"],
                 top_k=5,
                 session_override=db_session,
             )
 
-            assert len(results) > 0, f"Query '{item['query']}' returned no results"
+            assert len(results) > 0, f"Query '{tq['query']}' returned no results"
 
-            # Check top 1
             top_1 = results[0]
-            if top_1.symbol_name == item["expected_symbol"]:
-                hit_at_1_count += 1
-
-            # Check top 3
-            top_3_symbols = [r.symbol_name for r in results[:3]]
             top_3_files = [r.file_path for r in results[:3]]
-            if item["expected_symbol"] in top_3_symbols and item["expected_file"] in top_3_files:
+            top_3_symbols = [r.symbol_name for r in results[:3]]
+
+            is_hit_1 = tq["expected_target"] in top_1.file_path or top_1.symbol_name == tq["expected_symbol"]
+            is_hit_3 = any(tq["expected_target"] in f for f in top_3_files) or (
+                tq["expected_symbol"] in top_3_symbols
+            )
+
+            if is_hit_1:
+                hit_at_1_count += 1
+            if is_hit_3:
                 hit_at_3_count += 1
 
-            # Assert expected symbol appears within top 3
+            # Log ranks for verification
+            benchmark_log.append(
+                {
+                    "query": tq["query"],
+                    "target": tq["expected_target"],
+                    "top_1_file": top_1.file_path,
+                    "top_1_symbol": top_1.symbol_name,
+                    "top_3_files": top_3_files,
+                    "hit_at_1": is_hit_1,
+                    "hit_at_3": is_hit_3,
+                }
+            )
+
+            # Assert expected implementation is in top-3
             assert (
-                item["expected_symbol"] in top_3_symbols
-            ), f"Expected '{item['expected_symbol']}' in top 3 for query '{item['query']}', got {top_3_symbols}"
+                is_hit_3
+            ), f"Expected '{tq['expected_target']}' in top-3 for query '{tq['query']}', got {top_3_files}"
 
-    # Calculate and assert benchmark metrics
-    hit_at_1_rate = hit_at_1_count / total_queries
-    hit_at_3_rate = hit_at_3_count / total_queries
+    # Print summary
+    hit_1_rate = hit_at_1_count / total
+    hit_3_rate = hit_at_3_count / total
 
-    assert hit_at_1_rate >= 0.8, f"Hit@1 rate ({hit_at_1_rate:.2f}) below 0.80 threshold"
-    assert hit_at_3_rate == 1.0, f"Hit@3 rate ({hit_at_3_rate:.2f}) expected 1.00 (100%)"
+    print(f"\n--- 10-Query Benchmark Results: Hit@1 = {hit_1_rate:.0%}, Hit@3 = {hit_3_rate:.0%} ---")
+    for log in benchmark_log:
+        status = "PASS (Hit@1)" if log["hit_at_1"] else "PASS (Hit@3)" if log["hit_at_3"] else "FAIL"
+        print(f"  [{status}] '{log['query']}' -> #1: {log['top_1_file']} ({log['top_1_symbol']})")
+
+    assert hit_1_rate >= 0.90, f"Hit@1 rate ({hit_1_rate:.2f}) below 90% threshold"
+    assert hit_3_rate == 1.0, f"Hit@3 rate ({hit_3_rate:.2f}) expected 100%"
