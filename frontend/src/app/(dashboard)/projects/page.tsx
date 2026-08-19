@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FolderGit2,
@@ -106,8 +107,9 @@ export default function ProjectsPage() {
             const repo = hasRepo ? project.repositories![0] : null;
 
             return (
-              <div
+              <Link
                 key={project.id}
+                href={`/projects/${project.id}`}
                 className="p-6 rounded-2xl border border-border/50 bg-card/50 backdrop-blur-xl hover:border-primary/40 transition-all space-y-4 group flex flex-col justify-between"
               >
                 <div className="space-y-3">
@@ -116,9 +118,19 @@ export default function ProjectsPage() {
                       <FolderGit2 className="w-5 h-5" />
                     </div>
                     {repo ? (
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> Ready to Index
-                      </span>
+                      repo.indexing_status === "ready" ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
+                          <ShieldCheck className="w-2.5 h-2.5" /> Indexed
+                        </span>
+                      ) : repo.indexing_status === "indexing" ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1 animate-pulse">
+                          <Clock className="w-2.5 h-2.5" /> Indexing
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" /> Ready to Index
+                        </span>
+                      )
                     ) : (
                       <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
                         No Repo
@@ -143,14 +155,9 @@ export default function ProjectsPage() {
                           <span className="truncate max-w-[180px]">{repo.full_name}</span>
                         </div>
                         {repo.html_url && (
-                          <a
-                            href={repo.html_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-muted-foreground hover:text-foreground"
-                          >
+                          <span className="text-muted-foreground group-hover:text-foreground">
                             <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -179,7 +186,7 @@ export default function ProjectsPage() {
                     {new Date(project.created_at).toLocaleDateString()}
                   </span>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

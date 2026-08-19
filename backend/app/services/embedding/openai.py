@@ -20,11 +20,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self,
         api_key: str | None = None,
         model: str | None = None,
-        dimension: int = 1536,
+        dimension: int | None = None,
     ) -> None:
         self._api_key = api_key or settings.OPENAI_API_KEY
         self._model = model or settings.OPENAI_EMBEDDING_MODEL
-        self._dimension = dimension
+        self._dimension = dimension or settings.OPENAI_EMBEDDING_DIMENSION
 
     @property
     def provider_name(self) -> str:
@@ -52,10 +52,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         results: list[list[float]] = []
         batch_size = min(settings.MAX_CHUNKS_PER_EMBED_BATCH, 100)
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
-            batch_embeddings = await self._embed_batch_with_retry(batch)
-            results.extend(batch_embeddings)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i : i + batch_size]
+                batch_embeddings = await self._embed_batch_with_retry(batch, client=client)
+                results.extend(batch_embeddings)
 
         return results
 
@@ -77,6 +78,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self,
         texts: list[str],
         max_retries: int = 4,
+        client: httpx.AsyncClient | None = None,
     ) -> list[list[float]]:
         url = f"{self.BASE_URL}/embeddings"
         headers = {
@@ -86,36 +88,40 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         payload = {
             "model": self._model,
             "input": texts,
+            "dimensions": self._dimension,
         }
 
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                if client is not None:
                     response = await client.post(url, headers=headers, json=payload)
+                else:
+                    async with httpx.AsyncClient(timeout=30.0) as local_client:
+                        response = await local_client.post(url, headers=headers, json=payload)
 
-                    if response.status_code == 200:
-                        data = response.json()
-                        raw_data = data.get("data", [])
-                        return [item.get("embedding", []) for item in raw_data]
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_data = data.get("data", [])
+                    return [item.get("embedding", []) for item in raw_data]
 
-                    elif response.status_code in (429, 500, 502, 503, 504):
-                        if attempt < max_retries - 1:
-                            delay = (2**attempt) + random.uniform(0.1, 0.5)
-                            logger.warning(
-                                f"OpenAI embedding rate limit / error ({response.status_code}). Retrying in {delay:.2f}s..."
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-                        else:
-                            raise ForgeAIException(
-                                f"OpenAI embedding API rate limit/error exceeded after {max_retries} attempts: {response.text}",
-                                status_code=502,
-                            )
+                elif response.status_code in (429, 500, 502, 503, 504):
+                    if attempt < max_retries - 1:
+                        delay = (2**attempt) + random.uniform(0.1, 0.5)
+                        logger.warning(
+                            f"OpenAI embedding rate limit / error ({response.status_code}). Retrying in {delay:.2f}s..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
                     else:
                         raise ForgeAIException(
-                            f"OpenAI embedding API error ({response.status_code}): {response.text}",
+                            f"OpenAI embedding API rate limit/error exceeded after {max_retries} attempts: {response.text}",
                             status_code=502,
                         )
+                else:
+                    raise ForgeAIException(
+                        f"OpenAI embedding API error ({response.status_code}): {response.text}",
+                        status_code=502,
+                    )
 
             except httpx.RequestError as exc:
                 if attempt < max_retries - 1:

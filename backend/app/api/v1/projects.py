@@ -59,3 +59,17 @@ async def get_project(
     if not project:
         raise NotFoundException("Project", project_id)
     return project
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_200_OK)
+async def delete_project(
+    project_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a project and all associated repository indexing data."""
+    project_service = ProjectService(db)
+    deleted = await project_service.delete(current_user.id, project_id)
+    if not deleted:
+        raise NotFoundException("Project", project_id)
+    return {"message": "Project deleted successfully", "id": str(project_id)}

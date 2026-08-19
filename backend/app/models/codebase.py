@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
-from app.models.base import Base
+from app.models.base import Base, utc_now
 
 if TYPE_CHECKING:
     from app.models.project import Repository, RepositoryBranch
@@ -97,7 +97,7 @@ class RepositoryIndexVersion(Base):
     total_files: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
     completed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -143,12 +143,12 @@ class RepositoryFile(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     is_binary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 
@@ -198,7 +198,7 @@ class CodeChunk(Base):
         nullable=True,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
     index_version: Mapped["RepositoryIndexVersion"] = relationship(
@@ -234,7 +234,7 @@ class ChunkEmbedding(Base):
     embedding_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(768), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
     __table_args__ = (
@@ -276,7 +276,7 @@ class CodeDependency(Base):
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
     index_version: Mapped["RepositoryIndexVersion"] = relationship(
@@ -321,5 +321,5 @@ class IndexingJob(Base):
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=utc_now, nullable=False
     )

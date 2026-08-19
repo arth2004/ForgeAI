@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
@@ -33,6 +33,51 @@ class IngestionEngine:
     """Orchestrates streaming repository ingestion, semantic chunking, embedding, and atomic index promotion."""
 
     @classmethod
+    async def cleanup_superseded_versions(
+        cls,
+        session: Any,
+        branch_id: uuid.UUID,
+        retention_count: int | None = None,
+    ) -> int:
+        """Purges old SUPERSEDED index versions beyond the configured retention limit.
+
+        Cascades automatically to files, chunks, embeddings, and dependencies.
+        Never touches ACTIVE, BUILDING, or VALIDATED versions.
+        """
+        from app.core.config import settings
+
+        limit = retention_count if retention_count is not None else settings.INDEX_RETENTION_COUNT
+        if limit < 0:
+            return 0
+
+        superseded_q = (
+            select(RepositoryIndexVersion)
+            .where(
+                RepositoryIndexVersion.branch_id == branch_id,
+                RepositoryIndexVersion.status == IndexVersionStatus.SUPERSEDED,
+            )
+            .order_by(desc(RepositoryIndexVersion.created_at))
+        )
+        superseded_res = await session.execute(superseded_q)
+        superseded_versions = list(superseded_res.scalars().all())
+
+        if len(superseded_versions) <= limit:
+            return 0
+
+        to_delete = superseded_versions[limit:]
+        deleted_count = 0
+        for ver in to_delete:
+            await session.delete(ver)
+            deleted_count += 1
+
+        await session.flush()
+        if deleted_count > 0:
+            logger.info(
+                f"Cleaned up {deleted_count} stale superseded index versions for branch {branch_id}"
+            )
+        return deleted_count
+
+    @classmethod
     async def run_indexing(
         cls,
         repository_id: uuid.UUID,
@@ -56,6 +101,27 @@ class IngestionEngine:
             branch = await session.get(RepositoryBranch, branch_id)
             if not branch:
                 raise NotFoundException("RepositoryBranch", branch_id)
+
+            # Concurrency guard: check for active indexing job on the same branch
+            active_jobs_q = select(IndexingJob).where(
+                IndexingJob.branch_id == branch_id,
+                IndexingJob.status.in_(
+                    [
+                        IndexingJobStatus.ACQUIRING,
+                        IndexingJobStatus.PARSING,
+                        IndexingJobStatus.EMBEDDING,
+                        IndexingJobStatus.INDEXING,
+                    ]
+                ),
+            )
+            if job_id:
+                active_jobs_q = active_jobs_q.where(IndexingJob.id != job_id)
+            active_job = (await session.execute(active_jobs_q)).scalars().first()
+            if active_job:
+                raise ForgeAIException(
+                    f"An indexing job ({active_job.id}) is already in progress for this repository branch.",
+                    status_code=409,
+                )
 
             # Find organization owner/admin user with GitHub installation ID
             from app.models.auth import Membership, User
@@ -301,12 +367,14 @@ class IngestionEngine:
                                 )
                                 session.add(new_emb)
 
-                # Update job progress
-                total_chunks_q = select(CodeChunk).where(
-                    CodeChunk.index_version_id == index_version_id
-                )
-                total_chunks_res = await session.execute(total_chunks_q)
-                total_chunks_count = len(total_chunks_res.scalars().all())
+                # Update job progress using database-side count
+                total_chunks_count = (
+                    await session.execute(
+                        select(func.count(CodeChunk.id)).where(
+                            CodeChunk.index_version_id == index_version_id
+                        )
+                    )
+                ).scalar_one()
 
                 job = await session.get(IndexingJob, job_id)
                 if job:
@@ -328,7 +396,7 @@ class IngestionEngine:
                 for c_id, vec in zip(chunk_ids, vectors, strict=False):
                     generated_vectors.append((c_id, vec))
 
-            # 9. Save vectors and promote index atomically in short DB transaction
+            # 9. Save vectors, validate integrity, and promote index atomically in short DB transaction
             async with session_maker() as session:
                 for chunk_id, vec in generated_vectors:
                     db_emb = ChunkEmbedding(
@@ -345,15 +413,21 @@ class IngestionEngine:
 
                 await session.flush()
 
-                # Validate integrity
-                chunks_count_q = select(CodeChunk).where(
-                    CodeChunk.index_version_id == index_version_id
-                )
-                embeddings_count_q = select(ChunkEmbedding).where(
-                    ChunkEmbedding.index_version_id == index_version_id
-                )
-                c_count = len((await session.execute(chunks_count_q)).scalars().all())
-                e_count = len((await session.execute(embeddings_count_q)).scalars().all())
+                # Validate integrity using SQL COUNT
+                c_count = (
+                    await session.execute(
+                        select(func.count(CodeChunk.id)).where(
+                            CodeChunk.index_version_id == index_version_id
+                        )
+                    )
+                ).scalar_one()
+                e_count = (
+                    await session.execute(
+                        select(func.count(ChunkEmbedding.id)).where(
+                            ChunkEmbedding.index_version_id == index_version_id
+                        )
+                    )
+                ).scalar_one()
 
                 if c_count != e_count:
                     raise ForgeAIException(
@@ -361,7 +435,13 @@ class IngestionEngine:
                         status_code=500,
                     )
 
-                # 10. Atomic Index Promotion
+                # 10. Intermediate VALIDATED State (persisted before atomic promotion)
+                new_version = await session.get(RepositoryIndexVersion, index_version_id)
+                if new_version:
+                    new_version.status = IndexVersionStatus.VALIDATED
+                    await session.flush()
+
+                # 11. Atomic Index Promotion
                 # A. Mark old ACTIVE versions for branch as SUPERSEDED
                 await session.execute(
                     update(RepositoryIndexVersion)
@@ -372,8 +452,7 @@ class IngestionEngine:
                     .values(status=IndexVersionStatus.SUPERSEDED)
                 )
 
-                # B. Mark new version as ACTIVE
-                new_version = await session.get(RepositoryIndexVersion, index_version_id)
+                # B. Mark new VALIDATED version as ACTIVE
                 if new_version:
                     new_version.status = IndexVersionStatus.ACTIVE
                     new_version.total_files = len(incoming_entries)
@@ -396,6 +475,9 @@ class IngestionEngine:
                     job_obj.embedded_chunks = len(generated_vectors)
                     job_obj.status = IndexingJobStatus.COMPLETED
                     job_obj.completed_at = datetime.datetime.now(datetime.UTC)
+
+                # E. Cleanup old SUPERSEDED versions beyond retention count
+                await cls.cleanup_superseded_versions(session, branch_id=branch_id)
 
                 await session.commit()
                 logger.info(

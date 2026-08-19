@@ -27,5 +27,5 @@ class WorkerSettings:
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = 10
-    job_timeout = 600  # 10 minutes timeout for large repository ingestion
+    job_timeout = settings.ARQ_JOB_TIMEOUT_SECONDS
     keep_result = 3600  # Keep completed job results for 1 hour

@@ -334,3 +334,161 @@ async def test_quota_exhausted_indexing_failure_preserves_active_and_sets_user_f
         # Verify no secret leakage in error message
         assert "AIza" not in job.error_message
         assert "key=" not in job.error_message
+
+
+@pytest.mark.asyncio
+async def test_superseded_version_cleanup_retention(
+    setup_repo_for_ingestion: dict,
+    db_session,
+):
+    """Verifies that cleanup_superseded_versions purges versions exceeding retention limit and cascades to files/chunks/embeddings."""
+    repo = setup_repo_for_ingestion["repo"]
+    branch = setup_repo_for_ingestion["branch"]
+
+    from app.models.codebase import (
+        ChunkEmbedding,
+        CodeChunk,
+        RepositoryFile,
+    )
+
+    # 1. Create 1 ACTIVE version and 5 SUPERSEDED versions
+    active_ver = RepositoryIndexVersion(
+        repository_id=repo.id,
+        branch_id=branch.id,
+        commit_sha="sha_active",
+        status=IndexVersionStatus.ACTIVE,
+        total_files=1,
+        total_chunks=1,
+    )
+    db_session.add(active_ver)
+    await db_session.flush()
+
+    superseded_versions = []
+    for i in range(5):
+        ver = RepositoryIndexVersion(
+            repository_id=repo.id,
+            branch_id=branch.id,
+            commit_sha=f"sha_superseded_{i}",
+            status=IndexVersionStatus.SUPERSEDED,
+            total_files=1,
+            total_chunks=1,
+        )
+        db_session.add(ver)
+        await db_session.flush()
+        superseded_versions.append(ver)
+
+        # Add a file, chunk, and embedding to verify cascade deletion
+        f = RepositoryFile(
+            index_version_id=ver.id,
+            repository_id=repo.id,
+            file_path=f"src/file_{i}.py",
+            file_name=f"file_{i}.py",
+            extension=".py",
+            language="python",
+            size_bytes=100,
+            content_hash=f"hash_{i}",
+            is_binary=False,
+        )
+        db_session.add(f)
+        await db_session.flush()
+
+        c = CodeChunk(
+            index_version_id=ver.id,
+            file_id=f.id,
+            repository_id=repo.id,
+            chunk_index=0,
+            chunk_type="function",
+            symbol_name=f"fn_{i}",
+            start_line=1,
+            end_line=5,
+            content=f"def fn_{i}(): pass",
+            context_header=f"# file: file_{i}.py",
+            token_count=10,
+        )
+        db_session.add(c)
+        await db_session.flush()
+
+        emb = ChunkEmbedding(
+            chunk_id=c.id,
+            index_version_id=ver.id,
+            repository_id=repo.id,
+            provider="google",
+            model="gemini-embedding-2",
+            dimension=768,
+            embedding_version=1,
+            embedding=[0.1] * 768,
+        )
+        db_session.add(emb)
+
+    await db_session.commit()
+
+    # Retention limit = 2 (should delete 3 oldest superseded versions, keep 2 most recent)
+    deleted_count = await IngestionEngine.cleanup_superseded_versions(
+        db_session, branch_id=branch.id, retention_count=2
+    )
+    assert deleted_count == 3
+    await db_session.commit()
+
+    # Active version must remain intact
+    await db_session.refresh(active_ver)
+    assert active_ver.status == IndexVersionStatus.ACTIVE
+
+    # Check remaining versions
+    from sqlalchemy import select
+
+    remaining_res = await db_session.execute(
+        select(RepositoryIndexVersion).where(RepositoryIndexVersion.branch_id == branch.id)
+    )
+    remaining = remaining_res.scalars().all()
+    # 1 ACTIVE + 2 retained SUPERSEDED = 3 total
+    assert len(remaining) == 3
+
+    # Check that deleted version's chunks and embeddings were deleted via cascade
+    oldest_deleted_id = superseded_versions[0].id
+    old_chunks = (
+        await db_session.execute(
+            select(CodeChunk).where(CodeChunk.index_version_id == oldest_deleted_id)
+        )
+    ).scalars().all()
+    assert len(old_chunks) == 0
+
+    # Idempotency check: running cleanup again deletes 0
+    deleted_again = await IngestionEngine.cleanup_superseded_versions(
+        db_session, branch_id=branch.id, retention_count=2
+    )
+    assert deleted_again == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrency_guard_rejects_duplicate_active_indexing(
+    setup_repo_for_ingestion: dict,
+    db_session,
+):
+    """Verifies that run_indexing raises ForgeAIException (409) when an active indexing job is already in progress."""
+    repo = setup_repo_for_ingestion["repo"]
+    branch = setup_repo_for_ingestion["branch"]
+
+    from app.core.exceptions import ForgeAIException
+    from app.models.codebase import IndexingJob, IndexingJobStatus
+
+    # Create an in-flight job on this branch
+    active_job = IndexingJob(
+        repository_id=repo.id,
+        branch_id=branch.id,
+        commit_sha="sha_in_flight",
+        status=IndexingJobStatus.EMBEDDING,
+    )
+    db_session.add(active_job)
+    await db_session.commit()
+
+    # Attempt to run a second indexing operation on the same branch
+    with pytest.raises(ForgeAIException) as exc_info:
+        await IngestionEngine.run_indexing(
+            repository_id=repo.id,
+            branch_id=branch.id,
+            session_factory=TestingSessionLocal,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "already in progress" in str(exc_info.value)
+

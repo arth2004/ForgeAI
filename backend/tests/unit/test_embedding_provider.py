@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from app.core.config import settings
-from app.core.exceptions import EmbeddingQuotaExhaustedException, ForgeAIException
+from app.core.exceptions import EmbeddingQuotaExhaustedException
 from app.services.embedding.factory import get_embedding_provider
 from app.services.embedding.gemini import (
     GeminiEmbeddingProvider,
@@ -211,3 +211,64 @@ def test_sanitize_error_redacts_api_keys():
 
     assert "AIzaSyD_secret12345" not in sanitized
     assert "[REDACTED" in sanitized
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_dimension_payload(monkeypatch):
+    """Verify OpenAI provider passes configured dimensions (768) in request payload."""
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-mock-openai-key")
+    provider = OpenAIEmbeddingProvider(dimension=768)
+
+    assert provider.dimension == 768
+    assert provider.provider_name == "openai"
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "data": [
+            {"embedding": [0.05] * 768},
+            {"embedding": [0.08] * 768},
+        ]
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_resp
+
+        vectors = await provider.embed_documents(["doc chunk A", "doc chunk B"])
+
+        assert len(vectors) == 2
+        assert len(vectors[0]) == 768
+        assert vectors[0][0] == 0.05
+
+        # Verify dimensions passed explicitly in JSON payload
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "json" in call_kwargs
+        assert call_kwargs["json"]["dimensions"] == 768
+        assert call_kwargs["json"]["input"] == ["doc chunk A", "doc chunk B"]
+
+
+@pytest.mark.asyncio
+async def test_openai_embed_query(monkeypatch):
+    """Verify OpenAI provider embed_query returns vector matching configured dimension."""
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-mock-openai-key")
+    provider = OpenAIEmbeddingProvider(dimension=768)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "data": [
+            {"embedding": [0.12] * 768},
+        ]
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_resp
+
+        vector = await provider.embed_query("search authentication engine")
+
+        assert len(vector) == 768
+        assert vector[0] == 0.12
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["json"]["dimensions"] == 768
+

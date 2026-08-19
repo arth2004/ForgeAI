@@ -1,3 +1,5 @@
+export * from "./ingestion";
+
 export interface HealthStatus {
   status: "ok" | "degraded" | "down";
   version: string;

@@ -92,3 +92,59 @@ async def test_tenant_isolation(client: AsyncClient):
         headers=u2_headers,
     )
     assert forbidden_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_project_lifecycle_and_security(client: AsyncClient):
+    # 1. Register User 1
+    u1_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "owner@domain.com", "password": "Password123!", "organization_name": "Org Alpha"},
+    )
+    u1_token = u1_resp.json()["access_token"]
+    u1_headers = {"Authorization": f"Bearer {u1_token}"}
+    u1_org_id = (await client.get("/api/v1/organizations", headers=u1_headers)).json()[0]["id"]
+
+    # Create project
+    proj_resp = await client.post(
+        "/api/v1/projects",
+        json={"name": "Alpha Project", "organization_id": u1_org_id},
+        headers=u1_headers,
+    )
+    assert proj_resp.status_code == 201
+    project_id = proj_resp.json()["id"]
+
+    # Connect a repository to the project
+    repo_resp = await client.post(
+        f"/api/v1/projects/{project_id}/repositories",
+        json={"project_id": project_id, "full_name": "org-alpha/repo-1", "default_branch": "main"},
+        headers=u1_headers,
+    )
+    assert repo_resp.status_code == 201
+
+    # 2. Register User 2 (unauthorized tenant)
+    u2_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "attacker@domain.com", "password": "Password123!", "organization_name": "Org Beta"},
+    )
+    u2_token = u2_resp.json()["access_token"]
+    u2_headers = {"Authorization": f"Bearer {u2_token}"}
+
+    # User 2 attempts to delete User 1's project -> 403 Forbidden
+    del_forbidden = await client.delete(f"/api/v1/projects/{project_id}", headers=u2_headers)
+    assert del_forbidden.status_code == 403
+
+    # 3. User 1 successfully deletes project -> 200 OK
+    del_success = await client.delete(f"/api/v1/projects/{project_id}", headers=u1_headers)
+    assert del_success.status_code == 200
+    assert del_success.json()["id"] == project_id
+
+    # 4. Subsequent GET on deleted project returns 404 Not Found
+    get_deleted = await client.get(f"/api/v1/projects/{project_id}", headers=u1_headers)
+    assert get_deleted.status_code == 404
+
+    # 5. Delete on non-existent project returns 404 Not Found
+    import uuid
+    random_id = str(uuid.uuid4())
+    del_nonexistent = await client.delete(f"/api/v1/projects/{random_id}", headers=u1_headers)
+    assert del_nonexistent.status_code == 404

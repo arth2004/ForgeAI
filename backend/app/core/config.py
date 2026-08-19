@@ -98,11 +98,18 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = Field(default="")
     OPENAI_EMBEDDING_MODEL: str = Field(default="text-embedding-3-small")
+    OPENAI_EMBEDDING_DIMENSION: int = Field(default=768)
 
     # Ingestion & Repository Limits (Configurable)
     MAX_FILE_SIZE_BYTES: int = Field(default=1_048_576)  # 1 MB
     MAX_REPO_SIZE_BYTES: int = Field(default=524_288_000)  # 500 MB
     MAX_CHUNKS_PER_EMBED_BATCH: int = Field(default=100)
+    INDEX_RETENTION_COUNT: int = Field(
+        default=3, description="Number of SUPERSEDED index versions to retain per branch"
+    )
+    ARQ_JOB_TIMEOUT_SECONDS: int = Field(
+        default=900, description="ARQ indexing worker job timeout in seconds (15 minutes)"
+    )
 
     # Frontend URL
     FRONTEND_URL: str = Field(default="http://localhost:3000")

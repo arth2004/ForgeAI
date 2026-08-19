@@ -187,6 +187,90 @@ async def test_get_indexing_status(
 
 
 @pytest.mark.asyncio
+async def test_trigger_repository_indexing_enqueues_arq_job(
+    client: AsyncClient,
+    seeded_project_and_index: dict,
+    auth_headers: dict[str, str],
+):
+    """Verifies that trigger_repository_indexing enqueues the job to ARQ queue with correct parameters."""
+    project = seeded_project_and_index["project"]
+    repo = seeded_project_and_index["repo"]
+    branch = seeded_project_and_index["branch"]
+
+    mock_arq_pool = AsyncMock()
+    mock_arq_pool.enqueue_job = AsyncMock()
+
+    with patch("app.api.v1.ingestion.get_arq_pool", return_value=mock_arq_pool):
+        response = await client.post(
+            f"/api/v1/projects/{project.id}/repositories/{repo.id}/index",
+            json={"is_full_reindex": True, "branch_id": str(branch.id)},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "pending"
+        job_id = data["job_id"]
+
+        # Assert ARQ enqueue was invoked with correct arguments
+        mock_arq_pool.enqueue_job.assert_called_once_with(
+            "index_repository_task",
+            str(repo.id),
+            str(branch.id),
+            is_full_reindex=True,
+            job_id=job_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_trigger_indexing_concurrency_returns_active_job(
+    client: AsyncClient,
+    seeded_project_and_index: dict,
+    auth_headers: dict[str, str],
+    db_session,
+):
+    """Verifies that triggering indexing while a job is in progress returns the existing active job instead of spawning a new one."""
+    project = seeded_project_and_index["project"]
+    repo = seeded_project_and_index["repo"]
+    branch = seeded_project_and_index["branch"]
+
+    from app.models.codebase import IndexingJob, IndexingJobStatus
+
+    # Create an active job
+    active_job = IndexingJob(
+        repository_id=repo.id,
+        branch_id=branch.id,
+        commit_sha=repo.default_branch,
+        status=IndexingJobStatus.PARSING,
+        total_files=50,
+        processed_files=20,
+    )
+    db_session.add(active_job)
+    await db_session.commit()
+
+    mock_arq_pool = AsyncMock()
+    mock_arq_pool.enqueue_job = AsyncMock()
+
+    with patch("app.api.v1.ingestion.get_arq_pool", return_value=mock_arq_pool):
+        response = await client.post(
+            f"/api/v1/projects/{project.id}/repositories/{repo.id}/index",
+            json={"is_full_reindex": False, "branch_id": str(branch.id)},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["job_id"] == str(active_job.id)
+        assert data["status"] == "parsing"
+        assert data["total_files"] == 50
+        assert data["processed_files"] == 20
+
+        # Verify that NO new job was enqueued
+        mock_arq_pool.enqueue_job.assert_not_called()
+
+
+
+@pytest.mark.asyncio
 async def test_hybrid_search_evidence_retrieval(
     client: AsyncClient,
     seeded_project_and_index: dict,

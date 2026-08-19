@@ -69,3 +69,14 @@ class ProjectService:
         )
         res = await self.db.execute(stmt)
         return res.scalar_one()
+
+    async def delete(self, user_id: uuid.UUID, project_id: uuid.UUID) -> bool:
+        project = await self.db.get(Project, project_id)
+        if not project:
+            return False
+        if not await self._verify_org_access(user_id, project.organization_id):
+            raise ForbiddenException("You do not have permission to delete this project.")
+
+        await self.db.delete(project)
+        await self.db.commit()
+        return True

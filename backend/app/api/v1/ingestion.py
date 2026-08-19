@@ -8,9 +8,12 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.exceptions import ForbiddenException, NotFoundException
+from app.core.redis import get_arq_pool
+from app.core.telemetry import logger
 from app.models.auth import Membership, User
 from app.models.codebase import (
     IndexingJob,
+    IndexingJobStatus,
     IndexVersionStatus,
     RepositoryFile,
     RepositoryIndexVersion,
@@ -88,28 +91,84 @@ async def trigger_repository_indexing(
                 raise NotFoundException("RepositoryBranch", "default")
         branch_id = branch.id
 
+    # Concurrency guard: return existing in-flight job if already running
+    active_job_q = (
+        select(IndexingJob)
+        .where(
+            IndexingJob.repository_id == repo_id,
+            IndexingJob.branch_id == branch_id,
+            IndexingJob.status.in_(
+                [
+                    IndexingJobStatus.PENDING,
+                    IndexingJobStatus.ACQUIRING,
+                    IndexingJobStatus.PARSING,
+                    IndexingJobStatus.EMBEDDING,
+                    IndexingJobStatus.INDEXING,
+                ]
+            ),
+        )
+        .order_by(desc(IndexingJob.created_at))
+        .limit(1)
+    )
+    active_job = (await db.execute(active_job_q)).scalars().first()
+    if active_job:
+        logger.info(
+            f"Indexing job {active_job.id} is already in progress for repo {repo_id}, branch {branch_id}"
+        )
+        return IndexingJobResponse(
+            job_id=active_job.id,
+            repository_id=active_job.repository_id,
+            branch_id=active_job.branch_id,
+            index_version_id=active_job.index_version_id,
+            commit_sha=active_job.commit_sha,
+            status=active_job.status.value
+            if hasattr(active_job.status, "value")
+            else str(active_job.status),
+            total_files=active_job.total_files,
+            processed_files=active_job.processed_files,
+            total_chunks=active_job.total_chunks,
+            embedded_chunks=active_job.embedded_chunks,
+            error_message=active_job.error_message,
+            started_at=active_job.started_at,
+            completed_at=active_job.completed_at,
+            created_at=active_job.created_at,
+        )
+
     # Create initial IndexingJob record
     job = IndexingJob(
         repository_id=repo_id,
         branch_id=branch_id,
         commit_sha=repo.default_branch,
+        status=IndexingJobStatus.PENDING,
     )
     db.add(job)
     await db.commit()
     await db.refresh(job)
 
-    # Execute indexing task (In production enqueued via ARQ; here directly dispatched asynchronously)
-    # We trigger the IngestionEngine with job_id
-    import asyncio
-
-    asyncio.create_task(
-        IngestionEngine.run_indexing(
-            repository_id=repo_id,
-            branch_id=branch_id,
+    # Enqueue indexing task to ARQ Redis worker queue
+    try:
+        arq_pool = await get_arq_pool()
+        await arq_pool.enqueue_job(
+            "index_repository_task",
+            str(repo_id),
+            str(branch_id),
             is_full_reindex=data.is_full_reindex,
-            job_id=job.id,
+            job_id=str(job.id),
         )
-    )
+    except Exception as e:
+        logger.warning(
+            f"ARQ queue unavailable ({e}). Falling back to local asynchronous indexing task."
+        )
+        import asyncio
+
+        asyncio.create_task(
+            IngestionEngine.run_indexing(
+                repository_id=repo_id,
+                branch_id=branch_id,
+                is_full_reindex=data.is_full_reindex,
+                job_id=job.id,
+            )
+        )
 
     return IndexingJobResponse(
         job_id=job.id,

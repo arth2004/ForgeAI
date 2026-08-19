@@ -85,12 +85,6 @@ class ApiClient {
       "forgeai_token",
       "forgeai_auth",
       "auth_token",
-      "access_token",
-      "token",
-      "auth_state",
-      "auth",
-      "session",
-      "user",
     ];
 
     // 1. Check candidate keys in localStorage
@@ -105,43 +99,17 @@ class ApiClient {
       } catch {}
     }
 
-    // 2. Scan all remaining localStorage keys
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && !candidateKeys.includes(k)) {
-          const item = localStorage.getItem(k);
-          const tok = extractToken(item);
-          if (tok) {
-            this.token = tok;
-            return tok;
-          }
-        }
-      }
-    } catch {}
-
-    // 3. Scan sessionStorage
-    try {
-      for (const key of candidateKeys) {
+    // 2. Fallback: check candidate keys in sessionStorage
+    for (const key of candidateKeys) {
+      try {
         const item = sessionStorage.getItem(key);
         const tok = extractToken(item);
         if (tok) {
           this.token = tok;
           return tok;
         }
-      }
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const k = sessionStorage.key(i);
-        if (k && !candidateKeys.includes(k)) {
-          const item = sessionStorage.getItem(k);
-          const tok = extractToken(item);
-          if (tok) {
-            this.token = tok;
-            return tok;
-          }
-        }
-      }
-    } catch {}
+      } catch {}
+    }
 
     return this.token;
   }
@@ -263,6 +231,12 @@ class ApiClient {
     return this.request<Project>("/projects", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProject(id: string): Promise<{ message: string; id: string }> {
+    return this.request<{ message: string; id: string }>(`/projects/${id}`, {
+      method: "DELETE",
     });
   }
 
