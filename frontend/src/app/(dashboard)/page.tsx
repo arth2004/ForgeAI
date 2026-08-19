@@ -128,7 +128,7 @@ export default function DashboardPage() {
                 get_file
               </span>
               <span className="rounded-md bg-slate-800/80 px-2 py-1 border border-white/5 font-mono text-cyan-300">
-                gemini-1.5-flash
+                gemini-3.1-pro-preview
               </span>
             </div>
           </div>

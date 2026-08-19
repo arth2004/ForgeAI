@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -30,7 +31,7 @@ def create_initial_state(
     branch_id: str | None = None,
     user_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-    initial_messages: list[BaseMessage] | None = None,
+    initial_messages: Sequence[BaseMessage] | None = None,
 ) -> AgentState:
     """Constructs a validated initial AgentState with standardized defaults."""
     messages: list[BaseMessage]

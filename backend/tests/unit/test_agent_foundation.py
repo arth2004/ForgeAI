@@ -1,5 +1,5 @@
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.agent.config import AgentConfig
 from app.agent.exceptions import (
@@ -87,7 +87,7 @@ async def test_mock_chat_model_provider():
     """Verifies that MockChatModelProvider returns deterministic responses and records call history."""
     mock_model = MockChatModelProvider(default_response="Mocked architecture analysis.")
 
-    messages = [
+    messages: list[BaseMessage] = [
         SystemMessage(content="System prompt"),
         HumanMessage(content="Explain the architecture."),
     ]
@@ -127,12 +127,71 @@ def test_get_chat_model_provider_factory():
     assert isinstance(openai_p, OpenAIChatModelProvider)
     assert openai_p.provider_name == "openai"
 
-    gemini_p = get_chat_model_provider(provider="google", model_name="gemini-1.5-flash")
+    gemini_p = get_chat_model_provider(provider="google", model_name="gemini-3.1-pro-preview")
     assert isinstance(gemini_p, GeminiChatModelProvider)
     assert gemini_p.provider_name == "google"
+    assert gemini_p.model_name == "gemini-3.1-pro-preview"
 
     with pytest.raises(ModelProviderException):
         get_chat_model_provider(provider="unsupported-vendor")
+
+
+def test_gemini_model_configuration_defaults_and_no_stale_fallbacks():
+    """Verifies that AGENT_GEMINI_MODEL defaults to gemini-3.1-pro-preview with no stale fallbacks."""
+    from app.core.config import settings
+
+    assert settings.AGENT_GEMINI_MODEL == "gemini-3.1-pro-preview"
+
+    config_default = AgentConfig.from_settings(provider_override="google")
+    assert config_default.model_name == "gemini-3.1-pro-preview"
+
+    # Explicit override is respected
+    config_custom = AgentConfig.from_settings(
+        provider_override="google", model_override="gemini-custom-override"
+    )
+    assert config_custom.model_name == "gemini-custom-override"
+
+    # Ensure no stale models are used as default
+    stale_models = {"gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-pro"}
+    assert config_default.model_name not in stale_models
+
+    provider_default = GeminiChatModelProvider()
+    assert provider_default.model_name == "gemini-3.1-pro-preview"
+    assert provider_default.model_name not in stale_models
+
+
+def test_gemini_provider_function_calling_payload():
+    """Verifies that GeminiChatModelProvider declares Phase 4 tools and structures tool messages."""
+    provider = GeminiChatModelProvider(api_key="mock-key", model_name="gemini-3.1-pro-preview")
+
+    tools_decl = provider._get_gemini_tools_declaration()
+    assert len(tools_decl) == 1
+    func_names = [f["name"] for f in tools_decl[0]["functionDeclarations"]]
+    assert "search_repository" in func_names
+    assert "search_symbol" in func_names
+    assert "get_file" in func_names
+
+    from langchain_core.messages import ToolMessage
+
+    messages = [
+        SystemMessage(content="System instruction text"),
+        HumanMessage(content="Where is auth implemented?"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "search_repository", "args": {"query": "auth"}, "id": "c1"}],
+        ),
+        ToolMessage(content='{"results": ["auth.py"]}', tool_call_id="c1", name="search_repository"),
+    ]
+
+    payload = provider._convert_messages_to_gemini_payload(messages)
+    assert "tools" in payload
+    assert payload["systemInstruction"]["parts"][0]["text"] == "System instruction text"
+    assert len(payload["contents"]) == 3
+    assert payload["contents"][0]["role"] == "user"
+    assert payload["contents"][1]["role"] == "model"
+    assert "functionCall" in payload["contents"][1]["parts"][0]
+    assert payload["contents"][2]["role"] == "function"
+    assert "functionResponse" in payload["contents"][2]["parts"][0]
 
 
 def test_sanitize_secret_text_redaction():

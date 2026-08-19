@@ -2,6 +2,7 @@ import logging
 import re
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
@@ -10,6 +11,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 
 from app.agent.exceptions import ModelProviderException
@@ -41,7 +43,7 @@ class BaseChatModelProvider(ABC):
         ...
 
     @abstractmethod
-    async def ainvoke(self, messages: list[BaseMessage], **kwargs: Any) -> BaseMessage:
+    async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         """Asynchronously sends messages to the model provider and returns a standard BaseMessage."""
         ...
 
@@ -71,7 +73,7 @@ class MockChatModelProvider(BaseChatModelProvider):
     def provider_name(self) -> str:
         return "mock"
 
-    async def ainvoke(self, messages: list[BaseMessage], **kwargs: Any) -> BaseMessage:
+    async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         self.call_history.append(list(messages))
         if self.should_fail:
             raise ModelProviderException(
@@ -112,12 +114,13 @@ class GeminiChatModelProvider(BaseChatModelProvider):
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-1.5-flash",
+        model_name: str | None = None,
         temperature: float = 0.2,
         max_tokens: int | None = 4096,
         timeout_seconds: float = 60.0,
     ):
-        super().__init__(model_name=model_name, temperature=temperature, max_tokens=max_tokens)
+        resolved_model = model_name or settings.AGENT_GEMINI_MODEL or "gemini-3.1-pro-preview"
+        super().__init__(model_name=resolved_model, temperature=temperature, max_tokens=max_tokens)
         self._api_key = api_key or settings.GEMINI_API_KEY
         self._timeout = timeout_seconds
 
@@ -125,7 +128,81 @@ class GeminiChatModelProvider(BaseChatModelProvider):
     def provider_name(self) -> str:
         return "google"
 
-    def _convert_messages_to_gemini_payload(self, messages: list[BaseMessage]) -> dict[str, Any]:
+    def _get_gemini_tools_declaration(self) -> list[dict[str, Any]]:
+        """Returns Google Gemini function declarations for Phase 4 repository tools."""
+        return [
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "search_repository",
+                        "description": (
+                            "Searches repository code and documentation using dense and sparse hybrid retrieval. "
+                            "Use for conceptual inquiries, feature discovery, and locating implementations."
+                        ),
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "query": {
+                                    "type": "STRING",
+                                    "description": "The search query to match against code and docs.",
+                                },
+                                "top_k": {
+                                    "type": "INTEGER",
+                                    "description": "Maximum number of evidence chunks to retrieve (default: 5).",
+                                },
+                            },
+                            "required": ["query"],
+                        },
+                    },
+                    {
+                        "name": "search_symbol",
+                        "description": (
+                            "Searches AST symbol declarations (classes, functions, methods, interfaces) in the repository."
+                        ),
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "symbol_name": {
+                                    "type": "STRING",
+                                    "description": "The symbol identifier to search for (e.g. 'verify_jwt_token').",
+                                },
+                                "limit": {
+                                    "type": "INTEGER",
+                                    "description": "Maximum symbol results to return (default: 10).",
+                                },
+                            },
+                            "required": ["symbol_name"],
+                        },
+                    },
+                    {
+                        "name": "get_file",
+                        "description": (
+                            "Retrieves the content of a specific repository source file with optional line slicing."
+                        ),
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "file_path": {
+                                    "type": "STRING",
+                                    "description": "Repository relative file path (e.g. 'app/core/security.py').",
+                                },
+                                "start_line": {
+                                    "type": "INTEGER",
+                                    "description": "Optional starting line number (1-indexed).",
+                                },
+                                "end_line": {
+                                    "type": "INTEGER",
+                                    "description": "Optional ending line number (1-indexed).",
+                                },
+                            },
+                            "required": ["file_path"],
+                        },
+                    },
+                ]
+            }
+        ]
+
+    def _convert_messages_to_gemini_payload(self, messages: Sequence[BaseMessage]) -> dict[str, Any]:
         contents = []
         system_instruction = None
 
@@ -135,7 +212,31 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             elif isinstance(msg, HumanMessage):
                 contents.append({"role": "user", "parts": [{"text": str(msg.content)}]})
             elif isinstance(msg, AIMessage):
-                contents.append({"role": "model", "parts": [{"text": str(msg.content)}]})
+                parts: list[dict[str, Any]] = []
+                if msg.content:
+                    parts.append({"text": str(msg.content)})
+                tool_calls = getattr(msg, "tool_calls", None) or []
+                for tc in tool_calls:
+                    parts.append({
+                        "functionCall": {
+                            "name": tc.get("name"),
+                            "args": tc.get("args", {}),
+                        }
+                    })
+                if not parts:
+                    parts.append({"text": ""})
+                contents.append({"role": "model", "parts": parts})
+            elif isinstance(msg, ToolMessage):
+                tool_name = getattr(msg, "name", None) or getattr(msg, "tool_call_id", None) or "tool_result"
+                contents.append({
+                    "role": "function",
+                    "parts": [{
+                        "functionResponse": {
+                            "name": tool_name,
+                            "response": {"output": str(msg.content)},
+                        }
+                    }],
+                })
             else:
                 contents.append({"role": "user", "parts": [{"text": str(msg.content)}]})
 
@@ -144,6 +245,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             "generationConfig": {
                 "temperature": self.temperature,
             },
+            "tools": self._get_gemini_tools_declaration(),
         }
         if self.max_tokens:
             payload["generationConfig"]["maxOutputTokens"] = self.max_tokens
@@ -152,7 +254,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
 
         return payload
 
-    async def ainvoke(self, messages: list[BaseMessage], **kwargs: Any) -> BaseMessage:
+    async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         if not self._api_key:
             raise ModelProviderException(
                 message="GEMINI_API_KEY is not configured in settings or environment.",
@@ -177,6 +279,13 @@ class GeminiChatModelProvider(BaseChatModelProvider):
                             err_detail = err_obj["message"]
                 except Exception:
                     pass
+
+                if response.status_code == 404:
+                    raise ModelProviderException(
+                        message=f"Gemini model '{self.model_name}' is unavailable or unsupported: {err_detail}",
+                        provider=self.provider_name,
+                        status_code=404,
+                    )
                 raise ModelProviderException(
                     message=f"Gemini API returned status {response.status_code}: {err_detail}",
                     provider=self.provider_name,
@@ -189,8 +298,22 @@ class GeminiChatModelProvider(BaseChatModelProvider):
                 return AIMessage(content="")
 
             parts = candidates[0].get("content", {}).get("parts", [])
-            text = "".join(part.get("text", "") for part in parts)
-            return AIMessage(content=text)
+            text_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
+
+            for part in parts:
+                if "text" in part and part["text"]:
+                    text_parts.append(part["text"])
+                if "functionCall" in part:
+                    fc = part["functionCall"]
+                    tool_calls.append({
+                        "name": fc.get("name"),
+                        "args": fc.get("args", {}),
+                        "id": str(uuid.uuid4()),
+                    })
+
+            text_content = "".join(text_parts)
+            return AIMessage(content=text_content, tool_calls=tool_calls)
 
         except ModelProviderException:
             raise
@@ -222,7 +345,7 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
     def provider_name(self) -> str:
         return "openai"
 
-    def _convert_messages_to_openai_payload(self, messages: list[BaseMessage]) -> list[dict[str, str]]:
+    def _convert_messages_to_openai_payload(self, messages: Sequence[BaseMessage]) -> list[dict[str, str]]:
         formatted = []
         for msg in messages:
             if isinstance(msg, SystemMessage):
@@ -233,7 +356,7 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
                 formatted.append({"role": "user", "content": str(msg.content)})
         return formatted
 
-    async def ainvoke(self, messages: list[BaseMessage], **kwargs: Any) -> BaseMessage:
+    async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         if not self._api_key:
             raise ModelProviderException(
                 message="OPENAI_API_KEY is not configured in settings or environment.",
