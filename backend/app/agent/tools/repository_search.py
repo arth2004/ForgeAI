@@ -12,7 +12,6 @@ from app.agent.tools.validation import (
     validate_top_k,
     validate_uuid,
 )
-from app.services.retrieval.hybrid import HybridSearchEngine
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,8 @@ class RepositorySearchTool(BaseRepositoryTool):
         )
 
         # 3. Invoke Phase 3 Hybrid Search Engine
+        from app.services.retrieval.hybrid import HybridSearchEngine
+
         logger.info(
             f"[Tool:search_repository] Executing hybrid search | project={project_uuid} "
             f"top_k={top_k} query='{query[:60]}'"

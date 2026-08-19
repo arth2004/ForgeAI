@@ -262,11 +262,15 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             )
 
         payload = self._convert_messages_to_gemini_payload(messages)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self._api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent"
+        headers = {
+            "x-goog-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
 
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, headers=headers, json=payload)
 
             if response.status_code != 200:
                 sanitized_error = sanitize_secret_text(response.text)
