@@ -13,6 +13,7 @@ from app.agent.models import (
     OpenAIChatModelProvider,
     get_chat_model_provider,
 )
+from app.agent.prompts import DEFAULT_AGENT_SYSTEM_PROMPT
 from app.agent.state import AgentState, create_initial_state
 from app.agent.tools import (
     BaseRepositoryTool,
@@ -37,6 +38,7 @@ __all__ = [
     "AgentState",
     "BaseChatModelProvider",
     "BaseRepositoryTool",
+    "DEFAULT_AGENT_SYSTEM_PROMPT",
     "FileViewerTool",
     "GeminiChatModelProvider",
     "MockChatModelProvider",

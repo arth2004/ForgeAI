@@ -1,11 +1,13 @@
 import json
 import logging
+import time
 import uuid
 from typing import Any, Literal
 
 from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
+    SystemMessage,
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
@@ -19,6 +21,7 @@ from app.agent.models import (
     get_chat_model_provider,
     sanitize_secret_text,
 )
+from app.agent.prompts import DEFAULT_AGENT_SYSTEM_PROMPT
 from app.agent.state import AgentState
 from app.agent.tools import (
     ToolUsageGuard,
@@ -35,11 +38,12 @@ async def agent_node(
     state: AgentState,
     config: RunnableConfig | None = None,
     model_provider_override: BaseChatModelProvider | None = None,
+    system_prompt_override: str | None = None,
 ) -> dict[str, Any]:
     """Core Agent reasoning node in the LangGraph graph.
 
-    Processes incoming user query / conversation messages, invokes the configured
-    LLM abstraction, and updates the agent state with the response.
+    Processes incoming user query / conversation messages, injects system reasoning
+    instructions if needed, invokes the configured LLM abstraction, and updates state.
     """
     # 1. Resolve model provider instance
     provider: BaseChatModelProvider
@@ -51,28 +55,58 @@ async def agent_node(
         provider = get_chat_model_provider()
 
     user_q = state.get("user_query", "")
-    messages: list[BaseMessage] = state.get("messages", [])
+    messages: list[BaseMessage] = list(state.get("messages", []))
 
+    # Ensure HumanMessage exists for the query if messages are empty
     if not messages and user_q:
         messages = [HumanMessage(content=user_q)]
 
+    # Prepend reasoning system instructions if not already present
+    has_system = any(isinstance(m, SystemMessage) for m in messages)
+    if not has_system:
+        configured_prompt = (
+            system_prompt_override
+            or (config.get("configurable", {}).get("system_prompt") if config else None)
+            or DEFAULT_AGENT_SYSTEM_PROMPT
+        )
+        messages = [SystemMessage(content=configured_prompt)] + messages
+
     current_iter = state.get("iteration_count", 0) + 1
 
-    logger.info(
-        f"[AgentGraph] Executing agent node | iteration={current_iter} provider={provider.provider_name} "
-        f"model={provider.model_name} message_count={len(messages)}"
-    )
+    if current_iter == 1:
+        logger.info(
+            f"[agent.execution.started] provider={provider.provider_name} "
+            f"model={provider.model_name} query_length={len(user_q)} message_count={len(messages)}"
+        )
+    else:
+        logger.info(
+            f"[agent.reasoning.step] iteration={current_iter} provider={provider.provider_name} "
+            f"model={provider.model_name} message_count={len(messages)}"
+        )
 
     # 2. Invoke Model Provider Abstraction
+    start_time = time.perf_counter()
     try:
         response_msg = await provider.ainvoke(messages)
         content_str = str(response_msg.content)
-        has_tools = bool(getattr(response_msg, "tool_calls", None))
+        tool_calls = getattr(response_msg, "tool_calls", None) or []
+        has_tools = len(tool_calls) > 0
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
-        logger.info(
-            f"[AgentGraph] Agent node completed successfully | "
-            f"has_tool_calls={has_tools} response_length={len(content_str)}"
-        )
+        if has_tools:
+            for tc in tool_calls:
+                tc_name = tc.get("name", "unknown")
+                tc_id = tc.get("id", "unknown")
+                logger.info(
+                    f"[agent.tool.requested] tool={tc_name} call_id={tc_id} "
+                    f"iteration={current_iter} duration_ms={duration_ms}"
+                )
+        else:
+            retrieved_count = len(state.get("retrieved_context", []))
+            logger.info(
+                f"[agent.execution.completed] iteration={current_iter} duration_ms={duration_ms} "
+                f"response_length={len(content_str)} retrieved_context_count={retrieved_count}"
+            )
 
         state_update: dict[str, Any] = {
             "messages": [response_msg],
@@ -87,7 +121,7 @@ async def agent_node(
 
     except ModelProviderException as mpe:
         sanitized_msg = sanitize_secret_text(mpe.message)
-        logger.error(f"[AgentGraph] Model provider error in agent node: {sanitized_msg}")
+        logger.error(f"[agent.model.failed] error={sanitized_msg} iteration={current_iter}")
         raise AgentExecutionException(
             message=f"Agent model invocation failed: {sanitized_msg}",
             node_name="agent",
@@ -95,14 +129,17 @@ async def agent_node(
         ) from mpe
     except Exception as exc:
         sanitized_exc = sanitize_secret_text(str(exc))
-        logger.error(f"[AgentGraph] Unexpected error during agent node execution: {sanitized_exc}")
+        logger.error(f"[agent.unexpected.failed] error={sanitized_exc} iteration={current_iter}")
         raise AgentExecutionException(
             message=f"Agent execution encountered an unexpected error: {sanitized_exc}",
             node_name="agent",
         ) from exc
 
 
-def tool_router(state: AgentState) -> Literal["tools", "__end__"]:
+def tool_router(
+    state: AgentState,
+    max_iterations: int = MAX_AGENT_ITERATIONS,
+) -> Literal["tools", "__end__"]:
     """Determines whether the model requested tool execution or produced a final answer."""
     messages = state.get("messages", [])
     if not messages:
@@ -112,9 +149,9 @@ def tool_router(state: AgentState) -> Literal["tools", "__end__"]:
     tool_calls = getattr(last_msg, "tool_calls", None)
 
     current_iter = state.get("iteration_count", 0)
-    if current_iter >= MAX_AGENT_ITERATIONS:
+    if current_iter >= max_iterations:
         logger.warning(
-            f"[AgentGraph] Reached maximum tool iteration limit ({MAX_AGENT_ITERATIONS}). Halting graph."
+            f"[agent.execution.limit_reached] Reached maximum tool iteration limit ({max_iterations}). Halting graph."
         )
         return "__end__"
 
@@ -177,28 +214,63 @@ async def tools_node(
         tool = get_agent_tool_by_name(tool_name)
         if not tool:
             err_msg = f"Tool '{tool_name}' is not registered."
-            logger.warning(f"[AgentGraph:tools_node] {err_msg}")
+            logger.warning(f"[agent.tool.failed] tool={tool_name} call_id={call_id} error={err_msg}")
             tool_messages.append(ToolMessage(content=json.dumps({"error": err_msg}), tool_call_id=call_id))
             executed_results.append({"tool": tool_name, "success": False, "error": err_msg})
             return
 
+        start_tool_time = time.perf_counter()
         try:
             guard.record_call(tool_name)
             res = await tool.aexecute(db=session, user_id=user_uuid, **tool_args)
+            tool_duration_ms = round((time.perf_counter() - start_tool_time) * 1000, 2)
 
             tool_messages.append(ToolMessage(content=json.dumps(res.model_dump()), tool_call_id=call_id))
-            executed_results.append({"tool": tool_name, "success": res.success, "data": res.data, "error": res.error})
+            executed_results.append({
+                "tool": tool_name,
+                "success": res.success,
+                "data": res.data,
+                "error": res.error,
+                "duration_ms": tool_duration_ms,
+            })
 
-            if res.success and isinstance(res.data, dict) and "results" in res.data:
-                new_retrieved_context.extend(res.data["results"])
+            if res.success and isinstance(res.data, dict):
+                logger.info(
+                    f"[agent.tool.completed] tool={tool_name} call_id={call_id} "
+                    f"duration_ms={tool_duration_ms} success=True"
+                )
+                if "results" in res.data and isinstance(res.data["results"], list):
+                    new_retrieved_context.extend(res.data["results"])
+                elif "symbols" in res.data and isinstance(res.data["symbols"], list):
+                    new_retrieved_context.extend(res.data["symbols"])
+                elif "file_path" in res.data:
+                    new_retrieved_context.append({
+                        "file_path": res.data.get("file_path"),
+                        "content": res.data.get("content"),
+                        "line_range": res.data.get("line_range"),
+                    })
+            else:
+                logger.warning(
+                    f"[agent.tool.completed] tool={tool_name} call_id={call_id} "
+                    f"duration_ms={tool_duration_ms} success=False error={res.error}"
+                )
 
         except Exception as exc:
+            tool_duration_ms = round((time.perf_counter() - start_tool_time) * 1000, 2)
             sanitized_err = sanitize_secret_text(str(exc))
-            logger.error(f"[AgentGraph:tools_node] Error executing tool '{tool_name}': {sanitized_err}")
+            logger.warning(
+                f"[agent.tool.failed] tool={tool_name} call_id={call_id} "
+                f"duration_ms={tool_duration_ms} error={sanitized_err}"
+            )
             tool_messages.append(
                 ToolMessage(content=json.dumps({"error": sanitized_err, "tool_name": tool_name}), tool_call_id=call_id)
             )
-            executed_results.append({"tool": tool_name, "success": False, "error": sanitized_err})
+            executed_results.append({
+                "tool": tool_name,
+                "success": False,
+                "error": sanitized_err,
+                "duration_ms": tool_duration_ms,
+            })
 
     if db_session_override is not None:
         for tc in tool_calls:
@@ -221,8 +293,10 @@ def build_agent_graph(
     db_session: AsyncSession | None = None,
     user_id: uuid.UUID | None = None,
     tool_guard: ToolUsageGuard | None = None,
+    max_iterations: int = MAX_AGENT_ITERATIONS,
+    system_prompt: str | None = None,
 ) -> CompiledStateGraph:
-    """Constructs and compiles the Phase 4B LangGraph agent graph with repository tool node.
+    """Constructs and compiles the Phase 4 LangGraph agent graph with repository reasoning loop.
 
     Topology:
         START -> agent_node -> tool_router
@@ -234,7 +308,12 @@ def build_agent_graph(
 
     # Bound Agent Node
     async def _bound_agent_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
-        return await agent_node(state, config, model_provider_override=model_provider)
+        return await agent_node(
+            state,
+            config,
+            model_provider_override=model_provider,
+            system_prompt_override=system_prompt,
+        )
 
     # Bound Tools Node
     async def _bound_tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -246,11 +325,15 @@ def build_agent_graph(
             tool_guard_override=active_guard,
         )
 
+    # Bound Tool Router
+    def _bound_tool_router(state: AgentState) -> Literal["tools", "__end__"]:
+        return tool_router(state, max_iterations=max_iterations)
+
     workflow.add_node("agent", _bound_agent_node)
     workflow.add_node("tools", _bound_tools_node)
 
     workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", tool_router, {"tools": "tools", END: END})
+    workflow.add_conditional_edges("agent", _bound_tool_router, {"tools": "tools", END: END})
     workflow.add_edge("tools", "agent")
 
     compiled_graph = workflow.compile()

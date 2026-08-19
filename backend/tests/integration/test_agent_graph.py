@@ -1,7 +1,7 @@
 import inspect
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agent.exceptions import AgentExecutionException
 from app.agent.graph import build_agent_graph
@@ -57,9 +57,10 @@ async def test_agent_graph_execution_with_mock_model():
     assert result_state.get("retrieved_context") == []
     assert result_state.get("tool_results") == []
 
-    # 4. Verify mock provider call history
+    # 4. Verify mock provider call history received SystemMessage and HumanMessage
     assert len(mock_provider.call_history) == 1
-    assert mock_provider.call_history[0][0].content == "Where is the parser implemented?"
+    assert isinstance(mock_provider.call_history[0][0], SystemMessage)
+    assert mock_provider.call_history[0][1].content == "Where is the parser implemented?"
 
 
 @pytest.mark.asyncio

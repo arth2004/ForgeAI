@@ -13,6 +13,8 @@ class AgentConfig:
     temperature: float = 0.2
     max_tokens: int | None = 4096
     timeout_seconds: float = 60.0
+    max_iterations: int = 5
+    system_prompt: str | None = None
 
     @classmethod
     def from_settings(
@@ -22,6 +24,8 @@ class AgentConfig:
         temperature_override: float | None = None,
         max_tokens_override: int | None = None,
         timeout_override: float | None = None,
+        max_iterations_override: int | None = None,
+        system_prompt_override: str | None = None,
     ) -> "AgentConfig":
         """Factory creating AgentConfig using application settings with optional runtime overrides."""
         provider = (provider_override or settings.AGENT_DEFAULT_PROVIDER).lower()
@@ -47,6 +51,10 @@ class AgentConfig:
             timeout_seconds=timeout_override
             if timeout_override is not None
             else settings.AGENT_TIMEOUT_SECONDS,
+            max_iterations=max_iterations_override
+            if max_iterations_override is not None
+            else 5,
+            system_prompt=system_prompt_override,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,4 +65,6 @@ class AgentConfig:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "timeout_seconds": self.timeout_seconds,
+            "max_iterations": self.max_iterations,
+            "system_prompt": self.system_prompt,
         }
