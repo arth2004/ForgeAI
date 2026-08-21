@@ -7,7 +7,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.patching.validator import compute_file_sha256
 from app.agent.tools.git_tools import (
     CommitChangesTool,
     CreatePullRequestTool,
@@ -16,12 +15,10 @@ from app.agent.tools.git_tools import (
 from app.core.security import create_access_token, hash_password
 from app.models.agent import (
     AgentApproval,
-    AgentPatch,
     AgentSession,
     AgentWorkspace,
     ApprovalStatus,
     ApprovalType,
-    PatchStatus,
     WorkspaceStatus,
 )
 from app.models.auth import Membership, Organization, Role, User
