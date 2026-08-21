@@ -1,6 +1,8 @@
 from app.models.agent import (
     AgentApproval,
+    AgentCommit,
     AgentPatch,
+    AgentPullRequest,
     AgentSession,
     AgentTestExecution,
     AgentWorkspace,
@@ -8,6 +10,7 @@ from app.models.agent import (
     ApprovalType,
     PatchOperation,
     PatchStatus,
+    PullRequestStatus,
     TestExecutionStatus,
     WorkspaceStatus,
 )
@@ -54,12 +57,16 @@ __all__ = [
     "AgentApproval",
     "AgentPatch",
     "AgentTestExecution",
+    "AgentCommit",
+    "AgentPullRequest",
     "WorkspaceStatus",
     "ApprovalType",
     "ApprovalStatus",
     "PatchStatus",
     "PatchOperation",
     "TestExecutionStatus",
+    "PullRequestStatus",
 ]
+
 
 

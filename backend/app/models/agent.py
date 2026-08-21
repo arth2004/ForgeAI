@@ -23,7 +23,9 @@ class WorkspaceStatus(enum.StrEnum):
 class ApprovalType(enum.StrEnum):
     PLAN = "PLAN"
     DIFF = "DIFF"
+    COMMIT = "COMMIT"
     PUSH = "PUSH"
+    PR_CREATE = "PR_CREATE"
 
 
 class ApprovalStatus(enum.StrEnum):
@@ -31,7 +33,6 @@ class ApprovalStatus(enum.StrEnum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
-
 
 
 class PatchStatus(enum.StrEnum):
@@ -59,6 +60,13 @@ class TestExecutionStatus(enum.StrEnum):
     TIMEOUT = "TIMEOUT"
     CANCELLED = "CANCELLED"
     SANDBOX_UNAVAILABLE = "SANDBOX_UNAVAILABLE"
+
+
+class PullRequestStatus(enum.StrEnum):
+    READY = "READY"
+    CREATED = "CREATED"
+    FAILED = "FAILED"
+    CLOSED = "CLOSED"
 
 
 class AgentSession(Base, UUIDMixin, TimestampMixin):
@@ -147,6 +155,21 @@ class AgentWorkspace(Base, UUIDMixin, TimestampMixin):
         String(64),
         nullable=False,
     )
+    branch_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+    )
+    current_commit_sha: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        default=None,
+    )
+    remote_branch_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+    )
     expires_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -207,6 +230,104 @@ class AgentPatch(Base, UUIDMixin, TimestampMixin):
     )
 
 
+class AgentCommit(Base, UUIDMixin, TimestampMixin):
+    """Represents an approved, recorded Git commit created within an ephemeral workspace."""
+
+    __tablename__ = "agent_commits"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    branch_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    commit_sha: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+    message: Mapped[str] = mapped_column(
+        String(1024),
+        nullable=False,
+    )
+
+
+class AgentPullRequest(Base, UUIDMixin, TimestampMixin):
+    """Represents a GitHub Pull Request proposed and created through human approval."""
+
+    __tablename__ = "agent_pull_requests"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    branch_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    base_branch: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    commit_sha: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    github_pr_number: Mapped[int | None] = mapped_column(
+        nullable=True,
+        default=None,
+    )
+    github_pr_url: Mapped[str | None] = mapped_column(
+        String(1024),
+        nullable=True,
+        default=None,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    body: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default=PullRequestStatus.READY.value,
+        nullable=False,
+        index=True,
+    )
+
+
 class AgentApproval(Base, UUIDMixin, TimestampMixin):
     """Represents a human-in-the-loop approval gate for agent actions."""
 
@@ -227,6 +348,18 @@ class AgentApproval(Base, UUIDMixin, TimestampMixin):
     patch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("agent_patches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    commit_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_commits.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    pull_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_pull_requests.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -332,5 +465,6 @@ class AgentTestExecution(Base, UUIDMixin, TimestampMixin):
         nullable=True,
         default=None,
     )
+
 
 

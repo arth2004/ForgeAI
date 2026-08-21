@@ -7,7 +7,9 @@ import { AgentSources } from "./AgentSources";
 import { AgentPlanView } from "./AgentPlanView";
 import { AgentDiffView } from "./AgentDiffView";
 import { AgentTestPanel } from "./AgentTestPanel";
+import { AgentGitPanel } from "./AgentGitPanel";
 import { Sparkles, User, AlertCircle, Loader2 } from "lucide-react";
+
 
 
 interface AgentMessageProps {
@@ -99,10 +101,20 @@ export function AgentMessage({ message }: AgentMessageProps) {
             />
           )}
 
+          {/* Phase 5D Git Branch, Commit & Pull Request Panel */}
+          {message.workspace && (message.patch?.status === "APPLIED" || message.commit || message.pullRequest) && (
+            <AgentGitPanel
+              workspace={message.workspace}
+              commit={message.commit}
+              pullRequest={message.pullRequest}
+            />
+          )}
+
           {/* Sources Citations */}
           {message.sources && message.sources.length > 0 && (
             <AgentSources sources={message.sources} />
           )}
+
 
 
           {/* Error Banner */}

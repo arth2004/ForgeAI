@@ -1,5 +1,14 @@
 from app.agent.tools.base import BaseRepositoryTool, ToolExecutionResult
 from app.agent.tools.file_viewer import FileViewerInput, FileViewerTool
+from app.agent.tools.git_tools import (
+    CommitChangesTool,
+    CreateBranchInput,
+    CreateBranchTool,
+    CreatePullRequestTool,
+    GitStatusInput,
+    GitStatusTool,
+    PushBranchTool,
+)
 from app.agent.tools.limits import (
     DEFAULT_SEARCH_RESULTS,
     DEFAULT_SYMBOL_RESULTS,
@@ -44,8 +53,12 @@ def get_agent_tools() -> list[BaseRepositoryTool]:
         ProposePatchTool(),
         RunTestsTool(),
         ApplyPatchTool(),
+        CreateBranchTool(),
+        GitStatusTool(),
+        CommitChangesTool(),
+        PushBranchTool(),
+        CreatePullRequestTool(),
     ]
-
 
 
 def get_agent_tool_by_name(tool_name: str) -> BaseRepositoryTool | None:
@@ -68,9 +81,15 @@ __all__ = [
     "ApplyPatchTool",
     "ProposePatchInput",
     "ProposePatchTool",
-
     "RunTestsInput",
     "RunTestsTool",
+    "CreateBranchInput",
+    "CreateBranchTool",
+    "GitStatusInput",
+    "GitStatusTool",
+    "CommitChangesTool",
+    "PushBranchTool",
+    "CreatePullRequestTool",
     "RepositoryNotIndexedError",
     "RepositorySearchInput",
     "RepositorySearchTool",
@@ -90,4 +109,5 @@ __all__ = [
     "validate_top_k",
     "validate_uuid",
 ]
+
 

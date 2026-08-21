@@ -45,10 +45,14 @@ export interface AgentWorkspace {
   status: string;
   path: string;
   base_commit_sha: string;
+  branch_name?: string | null;
+  current_commit_sha?: string | null;
+  remote_branch_name?: string | null;
   created_at: string;
   expires_at: string;
   destroyed_at?: string | null;
 }
+
 
 export interface AgentSource {
   file_path: string;
@@ -159,6 +163,32 @@ export interface AgentTestExecution {
   completed_at?: string | null;
 }
 
+export interface AgentCommit {
+  commit_id: string;
+  workspace_id: string;
+  session_id: string;
+  branch_name: string;
+  commit_sha: string;
+  message: string;
+  created_at: string;
+}
+
+export interface AgentPullRequest {
+  pr_id: string;
+  workspace_id: string;
+  session_id: string;
+  repository_id: string;
+  branch_name: string;
+  base_branch: string;
+  commit_sha: string;
+  github_pr_number?: number | null;
+  github_pr_url?: string | null;
+  title: string;
+  body: string;
+  status: "READY" | "CREATED" | "FAILED" | "CLOSED";
+  created_at: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -172,6 +202,8 @@ export interface ChatMessage {
   workspace?: AgentWorkspace | null;
   patch?: AgentPatch | null;
   testExecution?: AgentTestExecution | null;
+  commit?: AgentCommit | null;
+  pullRequest?: AgentPullRequest | null;
   error?: string | null;
   timestamp: string;
 }
@@ -194,11 +226,20 @@ export type AgentStreamEventType =
   | "agent.patch.failed"
   | "agent.test.started"
   | "agent.test.completed"
-  | "agent.test.failed";
+  | "agent.test.failed"
+  | "agent.branch.created"
+  | "agent.commit.pending"
+  | "agent.commit.created"
+  | "agent.push.pending"
+  | "agent.push.completed"
+  | "agent.pr.pending"
+  | "agent.pr.created"
+  | "agent.git.error";
 
 export interface AgentStreamEvent {
   event: AgentStreamEventType;
   data: Record<string, any>;
 }
+
 
 

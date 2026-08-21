@@ -10,13 +10,22 @@ from app.models.auth import User
 from app.schemas.agent import (
     AgentApprovalActionRequest,
     AgentApprovalResponse,
+    AgentBranchCreateRequest,
+    AgentBranchResponse,
     AgentChatRequest,
     AgentChatResponse,
+    AgentCommitRequest,
+    AgentCommitResponse,
+    AgentGitStatusResponse,
     AgentPatchApplyResponse,
     AgentPatchProposalRequest,
     AgentPatchResponse,
     AgentPlanRequest,
     AgentPlanResponse,
+    AgentPullRequestCreateRequest,
+    AgentPullRequestResponse,
+    AgentPushRequest,
+    AgentPushResponse,
     AgentTestExecutionRequest,
     AgentTestExecutionResponse,
     AgentWorkspaceCreateRequest,
@@ -24,6 +33,8 @@ from app.schemas.agent import (
     PatchDiffResponse,
 )
 from app.services.agent_service import AgentService
+from app.services.git_service import GitService
+from app.services.github_pr_service import GitHubPRService
 from app.services.patch_service import PatchService
 from app.services.planning_service import PlanningService
 from app.services.test_execution_service import TestExecutionService
@@ -427,5 +438,138 @@ async def get_test_execution(
         user_id=current_user.id,
         test_id=test_id,
     )
+
+
+# --- Phase 5D Endpoints: Git Branch, Commit & Pull Request Integration ---
+
+
+@router.post(
+    "/workspaces/{workspace_id}/branch",
+    response_model=AgentBranchResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Workspace Git Branch",
+    description="Creates an isolated Git branch within the active ephemeral workspace.",
+)
+async def create_branch(
+    workspace_id: uuid.UUID,
+    request: AgentBranchCreateRequest = AgentBranchCreateRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentBranchResponse:
+    """Creates a local Git branch in the workspace."""
+    git_service = GitService(db=db)
+    return await git_service.create_branch(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        branch_name=request.branch_name,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/git-status",
+    response_model=AgentGitStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Workspace Git Status",
+    description="Returns structured server-side Git working tree status for the workspace.",
+)
+async def get_git_status(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentGitStatusResponse:
+    """Inspects Git status of the workspace."""
+    git_service = GitService(db=db)
+    return await git_service.get_git_status(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/commit",
+    response_model=AgentCommitResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Commit Approved Changes",
+    description="Authoritative gate: commits approved workspace modifications after verifying explicit COMMIT approval.",
+)
+async def commit_changes(
+    workspace_id: uuid.UUID,
+    request: AgentCommitRequest = AgentCommitRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentCommitResponse:
+    """Commits approved changes in the workspace."""
+    git_service = GitService(db=db)
+    return await git_service.commit_changes(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        message=request.message,
+        patch_id=request.patch_id,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/push",
+    response_model=AgentPushResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Push Branch to Remote",
+    description="Authoritative gate: pushes committed branch to remote repository after verifying explicit PUSH approval.",
+)
+async def push_branch(
+    workspace_id: uuid.UUID,
+    request: AgentPushRequest = AgentPushRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPushResponse:
+    """Pushes workspace branch to remote repository."""
+    git_service = GitService(db=db)
+    return await git_service.push_branch(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        remote=request.remote,
+    )
+
+
+@router.post(
+    "/pulls/{workspace_id}/create",
+    response_model=AgentPullRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create GitHub Pull Request",
+    description="Authoritative gate: creates a GitHub Pull Request from the pushed branch after verifying explicit PR_CREATE approval.",
+)
+async def create_pull_request(
+    workspace_id: uuid.UUID,
+    request: AgentPullRequestCreateRequest = AgentPullRequestCreateRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPullRequestResponse:
+    """Creates a GitHub Pull Request."""
+    pr_service = GitHubPRService(db=db)
+    return await pr_service.create_pull_request(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        request=request,
+    )
+
+
+@router.get(
+    "/pulls/{pull_id}",
+    response_model=AgentPullRequestResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Pull Request Details",
+    description="Retrieves status and metadata of a created AgentPullRequest.",
+)
+async def get_pull_request(
+    pull_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPullRequestResponse:
+    """Retrieves an AgentPullRequest record."""
+    pr_service = GitHubPRService(db=db)
+    return await pr_service.get_pull_request(
+        user_id=current_user.id,
+        pr_id=pull_id,
+    )
+
 
 

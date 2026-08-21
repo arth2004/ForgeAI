@@ -257,5 +257,50 @@ class GitHubClient:
                 raise GitHubApiError(response.status_code, "Failed to fetch installation details.")
             return response.json()
 
+    async def create_pull_request(
+        self,
+        installation_id: int,
+        owner: str,
+        repo: str,
+        title: str,
+        head: str,
+        base: str,
+        body: str,
+        draft: bool = False,
+    ) -> dict[str, Any]:
+        """Creates a pull request on GitHub via the App installation token."""
+        token = await self.get_installation_access_token(installation_id)
+        payload = {
+            "title": title,
+            "head": head,
+            "base": base,
+            "body": body,
+            "draft": draft,
+        }
+        response = await self._request(
+            "POST",
+            f"/repos/{owner}/{repo}/pulls",
+            token=token,
+            json_data=payload,
+        )
+        return response.json()
+
+    async def get_pull_request(
+        self,
+        installation_id: int,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> dict[str, Any]:
+        """Fetches details of a GitHub pull request."""
+        token = await self.get_installation_access_token(installation_id)
+        response = await self._request(
+            "GET",
+            f"/repos/{owner}/{repo}/pulls/{pull_number}",
+            token=token,
+        )
+        return response.json()
+
 
 github_client = GitHubClient()
+

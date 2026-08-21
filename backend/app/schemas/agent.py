@@ -360,3 +360,116 @@ class AgentTestExecutionResponse(BaseModel):
     completed_at: datetime.datetime | None = None
 
 
+# --- Phase 5D Schemas: Git Branch, Commit & Pull Request Integration ---
+
+
+class AgentBranchCreateRequest(BaseModel):
+    """Payload to create an isolated Git branch within an active workspace."""
+
+    branch_name: str | None = Field(
+        default=None,
+        description="Optional custom branch name (e.g. forge/issue-42-fix-auth). Defaults to forge/{session_id}.",
+    )
+
+
+class AgentBranchResponse(BaseModel):
+    """Details of the created Git branch within the workspace."""
+
+    workspace_id: uuid.UUID
+    branch_name: str
+    base_commit_sha: str
+
+
+class AgentGitStatusResponse(BaseModel):
+    """Structured server-side Git working tree status."""
+
+    workspace_id: uuid.UUID
+    branch_name: str
+    base_commit_sha: str
+    current_commit_sha: str | None = None
+    changed_files: list[str] = Field(default_factory=list)
+    staged_files: list[str] = Field(default_factory=list)
+    unstaged_files: list[str] = Field(default_factory=list)
+    untracked_files: list[str] = Field(default_factory=list)
+
+
+class AgentCommitRequest(BaseModel):
+    """Payload for committing approved workspace changes."""
+
+    message: str | None = Field(
+        default=None,
+        max_length=1024,
+        description="Optional custom commit message.",
+    )
+    patch_id: uuid.UUID | None = Field(
+        default=None,
+        description="Associated approved AgentPatch ID.",
+    )
+
+
+class AgentCommitResponse(BaseModel):
+    """Details of an approved, recorded Git commit."""
+
+    commit_id: uuid.UUID
+    workspace_id: uuid.UUID
+    session_id: uuid.UUID
+    branch_name: str
+    commit_sha: str
+    message: str
+    created_at: datetime.datetime
+
+
+class AgentPushRequest(BaseModel):
+    """Payload for pushing committed branch to remote repository."""
+
+    remote: str = Field(default="origin", description="Remote name (must be origin).")
+
+
+class AgentPushResponse(BaseModel):
+    """Result of pushing branch to remote repository."""
+
+    workspace_id: uuid.UUID
+    branch_name: str
+    remote_branch_name: str
+    commit_sha: str
+    pushed_at: datetime.datetime
+    message: str
+
+
+class AgentPullRequestCreateRequest(BaseModel):
+    """Payload for creating a GitHub Pull Request from pushed branch."""
+
+    title: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Optional custom PR title.",
+    )
+    body: str | None = Field(
+        default=None,
+        description="Optional custom PR body.",
+    )
+    base_branch: str | None = Field(
+        default=None,
+        description="Target base branch (defaults to repository default branch).",
+    )
+
+
+class AgentPullRequestResponse(BaseModel):
+    """Details of an approved GitHub Pull Request."""
+
+    pr_id: uuid.UUID
+    workspace_id: uuid.UUID
+    session_id: uuid.UUID
+    repository_id: uuid.UUID
+    branch_name: str
+    base_branch: str
+    commit_sha: str
+    github_pr_number: int | None = None
+    github_pr_url: str | None = None
+    title: str
+    body: str
+    status: str
+    created_at: datetime.datetime
+
+
+
