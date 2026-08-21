@@ -31,7 +31,9 @@ async def indexed_forgeai_multi_domain_repo(db_session, test_user: User):
     membership = Membership(user_id=test_user.id, organization_id=org.id, role=Role.owner)
     db_session.add(membership)
 
-    project = Project(organization_id=org.id, name="ForgeAI Engine", description="Code Intelligence Engine")
+    project = Project(
+        organization_id=org.id, name="ForgeAI Engine", description="Code Intelligence Engine"
+    )
     db_session.add(project)
     await db_session.flush()
 
@@ -369,7 +371,9 @@ async def test_10_query_retrieval_benchmark(
             top_3_files = [r.file_path for r in results[:3]]
             top_3_symbols = [r.symbol_name for r in results[:3]]
 
-            is_hit_1 = expected_target_str in top_1.file_path or top_1.symbol_name == expected_symbol_str
+            is_hit_1 = (
+                expected_target_str in top_1.file_path or top_1.symbol_name == expected_symbol_str
+            )
             is_hit_3 = any(expected_target_str in f for f in top_3_files) or (
                 expected_symbol_str in top_3_symbols
             )
@@ -393,17 +397,21 @@ async def test_10_query_retrieval_benchmark(
             )
 
             # Assert expected implementation is in top-3
-            assert (
-                is_hit_3
-            ), f"Expected '{tq['expected_target']}' in top-3 for query '{tq['query']}', got {top_3_files}"
+            assert is_hit_3, (
+                f"Expected '{tq['expected_target']}' in top-3 for query '{tq['query']}', got {top_3_files}"
+            )
 
     # Print summary
     hit_1_rate = hit_at_1_count / total
     hit_3_rate = hit_at_3_count / total
 
-    print(f"\n--- 10-Query Benchmark Results: Hit@1 = {hit_1_rate:.0%}, Hit@3 = {hit_3_rate:.0%} ---")
+    print(
+        f"\n--- 10-Query Benchmark Results: Hit@1 = {hit_1_rate:.0%}, Hit@3 = {hit_3_rate:.0%} ---"
+    )
     for log in benchmark_log:
-        status = "PASS (Hit@1)" if log["hit_at_1"] else "PASS (Hit@3)" if log["hit_at_3"] else "FAIL"
+        status = (
+            "PASS (Hit@1)" if log["hit_at_1"] else "PASS (Hit@3)" if log["hit_at_3"] else "FAIL"
+        )
         print(f"  [{status}] '{log['query']}' -> #1: {log['top_1_file']} ({log['top_1_symbol']})")
 
     assert hit_1_rate >= 0.90, f"Hit@1 rate ({hit_1_rate:.2f}) below 90% threshold"

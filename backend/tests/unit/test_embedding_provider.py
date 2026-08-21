@@ -165,7 +165,9 @@ def test_retry_delay_parser_and_quota_detector():
     # Test retryDelay string
     data_with_delay = {
         "error": {
-            "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "25.5s"}]
+            "details": [
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "25.5s"}
+            ]
         }
     }
     assert parse_retry_delay(data_with_delay, httpx.Headers()) == 25.5
@@ -271,4 +273,3 @@ async def test_openai_embed_query(monkeypatch):
         assert vector[0] == 0.12
         call_kwargs = mock_post.call_args[1]
         assert call_kwargs["json"]["dimensions"] == 768
-

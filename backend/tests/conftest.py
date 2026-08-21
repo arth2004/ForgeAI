@@ -114,7 +114,9 @@ async def indexed_tool_repo(db_session: AsyncSession, test_user: User):
     membership = Membership(user_id=test_user.id, organization_id=org.id, role=Role.owner)
     db_session.add(membership)
 
-    project = Project(organization_id=org.id, name="Tool Test Project", description="Agent tool tests")
+    project = Project(
+        organization_id=org.id, name="Tool Test Project", description="Agent tool tests"
+    )
     db_session.add(project)
     await db_session.flush()
 
@@ -194,8 +196,28 @@ async def indexed_tool_repo(db_session: AsyncSession, test_user: User):
 
     vec_gemini = [0.0] * 768
     vec_gemini[0] = 1.0
-    db_session.add(ChunkEmbedding(chunk_id=chunk_gemini_class.id, index_version_id=index_ver.id, repository_id=repo.id, embedding=vec_gemini, dimension=768, provider="google", model="gemini-embedding-2"))
-    db_session.add(ChunkEmbedding(chunk_id=chunk_gemini_method.id, index_version_id=index_ver.id, repository_id=repo.id, embedding=vec_gemini, dimension=768, provider="google", model="gemini-embedding-2"))
+    db_session.add(
+        ChunkEmbedding(
+            chunk_id=chunk_gemini_class.id,
+            index_version_id=index_ver.id,
+            repository_id=repo.id,
+            embedding=vec_gemini,
+            dimension=768,
+            provider="google",
+            model="gemini-embedding-2",
+        )
+    )
+    db_session.add(
+        ChunkEmbedding(
+            chunk_id=chunk_gemini_method.id,
+            index_version_id=index_ver.id,
+            repository_id=repo.id,
+            embedding=vec_gemini,
+            dimension=768,
+            provider="google",
+            model="gemini-embedding-2",
+        )
+    )
 
     # 2. Code file: backend/app/services/retrieval/hybrid.py
     file_hybrid = RepositoryFile(
@@ -229,7 +251,17 @@ async def indexed_tool_repo(db_session: AsyncSession, test_user: User):
 
     vec_hybrid = [0.0] * 768
     vec_hybrid[3] = 1.0
-    db_session.add(ChunkEmbedding(chunk_id=chunk_hybrid.id, index_version_id=index_ver.id, repository_id=repo.id, embedding=vec_hybrid, dimension=768, provider="google", model="gemini-embedding-2"))
+    db_session.add(
+        ChunkEmbedding(
+            chunk_id=chunk_hybrid.id,
+            index_version_id=index_ver.id,
+            repository_id=repo.id,
+            embedding=vec_hybrid,
+            dimension=768,
+            provider="google",
+            model="gemini-embedding-2",
+        )
+    )
 
     # 3. Documentation file: docs/architecture.md
     file_doc = RepositoryFile(
@@ -263,7 +295,17 @@ async def indexed_tool_repo(db_session: AsyncSession, test_user: User):
 
     vec_doc = [0.0] * 768
     vec_doc[0] = 0.5
-    db_session.add(ChunkEmbedding(chunk_id=chunk_doc.id, index_version_id=index_ver.id, repository_id=repo.id, embedding=vec_doc, dimension=768, provider="google", model="gemini-embedding-2"))
+    db_session.add(
+        ChunkEmbedding(
+            chunk_id=chunk_doc.id,
+            index_version_id=index_ver.id,
+            repository_id=repo.id,
+            embedding=vec_doc,
+            dimension=768,
+            provider="google",
+            model="gemini-embedding-2",
+        )
+    )
     await db_session.commit()
 
     return {
@@ -273,4 +315,3 @@ async def indexed_tool_repo(db_session: AsyncSession, test_user: User):
         "index_version": index_ver,
         "files": [file_code, file_hybrid, file_doc],
     }
-

@@ -66,7 +66,9 @@ class FileViewerTool(BaseRepositoryTool):
     def args_schema(self) -> type[BaseModel]:
         return FileViewerInput
 
-    async def aexecute(self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any) -> ToolExecutionResult:
+    async def aexecute(
+        self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
+    ) -> ToolExecutionResult:
         fpath_raw = kwargs.get("file_path", "")
         project_id_raw = kwargs.get("project_id")
         repository_id_raw = kwargs.get("repository_id")
@@ -82,11 +84,17 @@ class FileViewerTool(BaseRepositoryTool):
         branch_uuid = validate_uuid(branch_id_raw, "branch_id", required=False)
 
         if start_line is not None and start_line < 1:
-            raise ToolValidationError("start_line must be greater than or equal to 1.", field_name="start_line")
+            raise ToolValidationError(
+                "start_line must be greater than or equal to 1.", field_name="start_line"
+            )
         if end_line is not None and end_line < 1:
-            raise ToolValidationError("end_line must be greater than or equal to 1.", field_name="end_line")
+            raise ToolValidationError(
+                "end_line must be greater than or equal to 1.", field_name="end_line"
+            )
         if start_line is not None and end_line is not None and start_line > end_line:
-            raise ToolValidationError("start_line cannot be greater than end_line.", field_name="start_line")
+            raise ToolValidationError(
+                "start_line cannot be greater than end_line.", field_name="start_line"
+            )
 
         # 2. Authorization & Active Index Verification
         await self.verify_project_access(user_id=user_id, project_id=project_uuid, db=db)
@@ -111,7 +119,9 @@ class FileViewerTool(BaseRepositoryTool):
             )
             .options(
                 selectinload(RepositoryFile.chunks),
-                selectinload(RepositoryFile.index_version).selectinload(RepositoryIndexVersion.branch),
+                selectinload(RepositoryFile.index_version).selectinload(
+                    RepositoryIndexVersion.branch
+                ),
             )
         )
         file_obj = (await db.execute(stmt)).scalars().first()
@@ -142,7 +152,9 @@ class FileViewerTool(BaseRepositoryTool):
         chunk_summaries = [
             {
                 "symbol_name": c.symbol_name,
-                "chunk_type": c.chunk_type.value if hasattr(c.chunk_type, "value") else str(c.chunk_type),
+                "chunk_type": c.chunk_type.value
+                if hasattr(c.chunk_type, "value")
+                else str(c.chunk_type),
                 "start_line": c.start_line,
                 "end_line": c.end_line,
                 "context_header": c.context_header,

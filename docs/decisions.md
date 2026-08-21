@@ -372,3 +372,106 @@ We need high-quality code embeddings with reasonable cost and latency, while ret
 ### Consequences
 - **Positive**: Fast, cost-effective vector search; clean single-dimension schema; future-proof provider switching.
 - **Negative**: Changing default providers in the future requires re-indexing.
+
+---
+
+## ADR-017: Controlled Write Architecture & Strict Read/Write Tool Isolation
+
+### Status
+Accepted
+
+### Context
+Phase 4 provided read-only repository understanding (`search_repository`, `search_symbol`, `get_file`). Phase 5 introduces code modification capabilities. Mixing read and write permissions or granting agents unconstrained write access can cause unintended file corruption, loss of repository integrity, and security vulnerabilities.
+
+### Decision
+1. Strictly separate read tools from write tools at the architectural layer.
+2. Read operations execute directly against the Phase 3 intelligence database (PostgreSQL + pgvector).
+3. Write operations (`propose_patch`, `apply_patch`, `revert_patch`) operate strictly within an ephemeral `AgentWorkspace` and never touch persistent branch storage without explicit human sign-off.
+4. Remote mutation tools (`push_branch`, `create_pull_request`) require a separate, cryptographically validated Human Approval token.
+
+### Consequences
+- **Positive**: Eliminates risk of accidental repository mutation; provides clear authorization boundaries; enforces least privilege per agent turn.
+- **Negative**: Requires multi-phase orchestration and state persistence across approval boundaries.
+
+---
+
+## ADR-018: Ephemeral Sandbox Execution Model with gVisor / Docker Isolation
+
+### Status
+Accepted
+
+### Context
+Executing agent-generated code, compilation steps, linters, and unit tests directly on the Forge AI backend host creates severe security risks: arbitrary code execution, host file system traversal, socket sniffing, and credential theft (database credentials, API keys, `.env`).
+
+### Decision
+1. Execute all test, linter, and build commands inside ephemeral, disposable Docker containers with `gVisor` (`runsc`) isolation.
+2. Apply strict resource limits per container: Max 2.0 vCPUs, 2048 MB RAM, 4 GB tmpfs storage, max 128 PIDs, and a 120-second execution timeout.
+3. Completely sever network access (`--network=none`) during test execution to prevent data exfiltration and reverse shells.
+4. Mount root filesystem as read-only; only `/workspace` is writable. Never mount `/var/run/docker.sock`, host `.env`, or backend database credentials into the container.
+
+### Consequences
+- **Positive**: Host system and tenant data are completely protected from malicious or buggy agent-generated code.
+- **Negative**: Adds minor container creation/destruction latency per test execution cycle.
+
+---
+
+## ADR-019: Mandatory Human-in-the-Loop (HITL) Approval Boundary for State-Mutating Operations
+
+### Status
+Accepted
+
+### Context
+Autonomous LLM agents are non-deterministic and can produce unintended changes, hallucinated patches, or disruptive git commits. Enterprise software engineering demands human oversight before persistent repository modifications are enacted.
+
+### Decision
+1. Implement mandatory **Human Approval Gates** prior to executing persistent side effects:
+   - **Gate 1 (Plan Approval)**: Human reviews and approves proposed file modification strategy.
+   - **Gate 2 (Diff Approval)**: Human reviews visual diffs, line additions/deletions, and test execution reports.
+   - **Gate 3 (Publish Approval)**: Human signs off before any remote branch is pushed or GitHub PR is created.
+2. The agent graph pauses at `AWAITING_APPROVAL` and emits SSE events (`agent.approval_required`). Execution resumes only upon receiving an authenticated approval endpoint request.
+
+### Consequences
+- **Positive**: Guarantees human oversight; prevents accidental automated branch pollution; delivers full transparency for auditability.
+- **Negative**: Workflow is asynchronous and requires user interaction to finalize pull requests.
+
+---
+
+## ADR-020: Isolated Agent Workspace & Worktree Lifecycle
+
+### Status
+Accepted
+
+### Context
+Multiple users or concurrent agent sessions working on the same repository must not mutate the same working directory or interfere with each other's in-progress changes.
+
+### Decision
+1. Model workspace state using `AgentWorkspace` database entities linked to unique Git worktrees (`/tmp/forge_workspaces/{workspace_id}`).
+2. Each agent session provisions an independent worktree branched off the target commit SHA.
+3. Workspaces follow a strict state machine (`CREATED` $\rightarrow$ `PREPARED` $\rightarrow$ `MODIFIED` $\rightarrow$ `TESTING` $\rightarrow$ `REVIEW` $\rightarrow$ `COMMITTED` $\rightarrow$ `DESTROYED`).
+4. Support instant transactional rollbacks (`git checkout -- . && git clean -fd`).
+5. Enforce an automated reaper for workspaces exceeding a 60-minute Time-To-Live (TTL).
+
+### Consequences
+- **Positive**: Full concurrency isolation; zero cross-session file contamination; instantaneous rollbacks.
+- **Negative**: Requires disk space management and background worker cleanup routines.
+
+---
+
+## ADR-021: Structured Patch-Based Code Modification Model
+
+### Status
+Accepted
+
+### Context
+Prompting LLMs to output entire file contents for minor changes is slow, expensive in token consumption, prone to hallucination in unmodified sections, and makes diff review cumbersome.
+
+### Decision
+1. Enforce structured, hunk-based patch objects (`AgentPatch`) containing `file_path`, `operation` (`create`, `modify`, `delete`), `old_content_hash`, `new_content_hash`, `hunks`, and `explanation`.
+2. Validate `old_content_hash` before applying to ensure the underlying file has not drifted.
+3. Apply patches atomically using AST-aware hunk application with exact line-boundary matching.
+4. Render structured hunks directly in Monaco Editor diff components for human review.
+
+### Consequences
+- **Positive**: Minimal token usage; atomic rollback capability; precise line-level attribution; prevents file drift bugs.
+- **Negative**: Requires server-side patch parsing and fuzz-matching logic when minor whitespace differences occur.
+

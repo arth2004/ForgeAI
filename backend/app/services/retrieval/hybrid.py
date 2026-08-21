@@ -24,32 +24,212 @@ from app.services.embedding.factory import get_embedding_provider
 logger = logging.getLogger(__name__)
 
 STOP_WORDS = {
-    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
-    "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being",
-    "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't",
-    "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during",
-    "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't",
-    "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here",
-    "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i",
-    "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's",
-    "its", "itself", "let's", "me", "more", "most", "mustn't", "my", "myself",
-    "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought",
-    "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she",
-    "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such",
-    "than", "that", "that's", "the", "their", "theirs", "them", "themselves",
-    "then", "there", "there's", "these", "they", "they'd", "they'll", "they're",
-    "they've", "this", "those", "through", "to", "too", "under", "until", "up",
-    "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were",
-    "weren't", "what", "what's", "when", "when's", "where", "where's", "which",
-    "while", "who", "who's", "whom", "why", "why's", "with", "won't", "would",
-    "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours",
-    "yourself", "yourselves", "implemented", "implementation", "implement", "located",
-    "defined", "code", "file", "files", "written", "find", "show", "tell", "give",
+    "a",
+    "about",
+    "above",
+    "after",
+    "again",
+    "against",
+    "all",
+    "am",
+    "an",
+    "and",
+    "any",
+    "are",
+    "aren't",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "below",
+    "between",
+    "both",
+    "but",
+    "by",
+    "can't",
+    "cannot",
+    "could",
+    "couldn't",
+    "did",
+    "didn't",
+    "do",
+    "does",
+    "doesn't",
+    "doing",
+    "don't",
+    "down",
+    "during",
+    "each",
+    "few",
+    "for",
+    "from",
+    "further",
+    "had",
+    "hadn't",
+    "has",
+    "hasn't",
+    "have",
+    "haven't",
+    "having",
+    "he",
+    "he'd",
+    "he'll",
+    "he's",
+    "her",
+    "here",
+    "here's",
+    "hers",
+    "herself",
+    "him",
+    "himself",
+    "his",
+    "how",
+    "how's",
+    "i",
+    "i'd",
+    "i'll",
+    "i'm",
+    "i've",
+    "if",
+    "in",
+    "into",
+    "is",
+    "isn't",
+    "it",
+    "it's",
+    "its",
+    "itself",
+    "let's",
+    "me",
+    "more",
+    "most",
+    "mustn't",
+    "my",
+    "myself",
+    "no",
+    "nor",
+    "not",
+    "of",
+    "off",
+    "on",
+    "once",
+    "only",
+    "or",
+    "other",
+    "ought",
+    "our",
+    "ours",
+    "ourselves",
+    "out",
+    "over",
+    "own",
+    "same",
+    "shan't",
+    "she",
+    "she'd",
+    "she'll",
+    "she's",
+    "should",
+    "shouldn't",
+    "so",
+    "some",
+    "such",
+    "than",
+    "that",
+    "that's",
+    "the",
+    "their",
+    "theirs",
+    "them",
+    "themselves",
+    "then",
+    "there",
+    "there's",
+    "these",
+    "they",
+    "they'd",
+    "they'll",
+    "they're",
+    "they've",
+    "this",
+    "those",
+    "through",
+    "to",
+    "too",
+    "under",
+    "until",
+    "up",
+    "very",
+    "was",
+    "wasn't",
+    "we",
+    "we'd",
+    "we'll",
+    "we're",
+    "we've",
+    "were",
+    "weren't",
+    "what",
+    "what's",
+    "when",
+    "when's",
+    "where",
+    "where's",
+    "which",
+    "while",
+    "who",
+    "who's",
+    "whom",
+    "why",
+    "why's",
+    "with",
+    "won't",
+    "would",
+    "wouldn't",
+    "you",
+    "you'd",
+    "you'll",
+    "you're",
+    "you've",
+    "your",
+    "yours",
+    "yourself",
+    "yourselves",
+    "implemented",
+    "implementation",
+    "implement",
+    "located",
+    "defined",
+    "code",
+    "file",
+    "files",
+    "written",
+    "find",
+    "show",
+    "tell",
+    "give",
 }
 
 GENERIC_FILENAMES = {
-    "index", "main", "types", "init", "__init__", "page", "layout", "app", "route",
-    "default", "setup", "conftest", "utils", "common", "base", "config"
+    "index",
+    "main",
+    "types",
+    "init",
+    "__init__",
+    "page",
+    "layout",
+    "app",
+    "route",
+    "default",
+    "setup",
+    "conftest",
+    "utils",
+    "common",
+    "base",
+    "config",
 }
 
 STEM_SYNONYMS = {
@@ -75,8 +255,27 @@ STEM_SYNONYMS = {
     "embedding": ["embeddings", "embed", "vector", "gemini", "openai", "dimension", "provider"],
     "generate": ["generate", "generated", "embed_documents", "embed_query", "embed", "embeddings"],
     "generated": ["generate", "generated", "embed_documents", "embed_query", "embed", "embeddings"],
-    "promotion": ["promote", "promotion", "active", "version", "engine", "lifecycle", "validated", "superseded", "run_indexing"],
-    "promote": ["promotion", "promote", "active", "version", "engine", "lifecycle", "validated", "run_indexing"],
+    "promotion": [
+        "promote",
+        "promotion",
+        "active",
+        "version",
+        "engine",
+        "lifecycle",
+        "validated",
+        "superseded",
+        "run_indexing",
+    ],
+    "promote": [
+        "promotion",
+        "promote",
+        "active",
+        "version",
+        "engine",
+        "lifecycle",
+        "validated",
+        "run_indexing",
+    ],
     "atomic": ["atomic", "transaction", "engine", "promotion", "lifecycle", "run_indexing"],
     "changed": ["differ", "diff", "difference", "delta", "modified", "change", "content_hash"],
     "incremental": ["incremental", "differ", "diff", "delta", "change", "content_hash", "modified"],
@@ -87,8 +286,25 @@ STEM_SYNONYMS = {
 }
 
 CODE_EXTENSIONS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".c", ".cpp",
-    ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".scala", ".sql"
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".sql",
 }
 
 
@@ -121,8 +337,18 @@ def is_implementation_query(query: str) -> bool:
     """Detects whether user query is asking for implementation / source code location."""
     q_lower = query.lower()
     triggers = [
-        "where is", "where are", "how does", "how do", "how is", "where can",
-        "find the", "implementation", "implemented", "defined", "show me", "which file"
+        "where is",
+        "where are",
+        "how does",
+        "how do",
+        "how is",
+        "where can",
+        "find the",
+        "implementation",
+        "implemented",
+        "defined",
+        "show me",
+        "which file",
     ]
     return any(tr in q_lower for tr in triggers)
 
@@ -310,60 +536,120 @@ class HybridSearchEngine:
                     weight_mult = 1.0 if is_primary else 0.75
 
                     # Symbol declaration matches ONLY apply to code AST declarations (CLASS, FUNCTION, METHOD, INTERFACE, MODULE)
-                    is_ast_chunk_cond = CodeChunk.chunk_type.in_([
-                        ChunkType.CLASS,
-                        ChunkType.FUNCTION,
-                        ChunkType.METHOD,
-                        ChunkType.INTERFACE,
-                        ChunkType.MODULE,
-                    ])
+                    is_ast_chunk_cond = CodeChunk.chunk_type.in_(
+                        [
+                            ChunkType.CLASS,
+                            ChunkType.FUNCTION,
+                            ChunkType.METHOD,
+                            ChunkType.INTERFACE,
+                            ChunkType.MODULE,
+                        ]
+                    )
 
                     # Exact symbol declaration match (e.g. `delete`, `GitHubAuthService`, `ProjectService`, `CodeChunker`)
                     score_exprs.append(
-                        case((and_(is_ast_chunk_cond, func.lower(CodeChunk.symbol_name) == t), int(260 * weight_mult)), else_=0)
+                        case(
+                            (
+                                and_(is_ast_chunk_cond, func.lower(CodeChunk.symbol_name) == t),
+                                int(260 * weight_mult),
+                            ),
+                            else_=0,
+                        )
                     )
                     score_exprs.append(
-                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"{t}%")), int(150 * weight_mult)), else_=0)
+                        case(
+                            (
+                                and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"{t}%")),
+                                int(150 * weight_mult),
+                            ),
+                            else_=0,
+                        )
                     )
                     score_exprs.append(
-                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}")), int(120 * weight_mult)), else_=0)
+                        case(
+                            (
+                                and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}")),
+                                int(120 * weight_mult),
+                            ),
+                            else_=0,
+                        )
                     )
                     score_exprs.append(
-                        case((and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%")), int(70 * weight_mult)), else_=0)
+                        case(
+                            (
+                                and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%")),
+                                int(70 * weight_mult),
+                            ),
+                            else_=0,
+                        )
                     )
 
                     # Specific filename & path matches
                     if t not in GENERIC_FILENAMES:
                         # Exact file stem (e.g. auth.py, differ.py, chunker.py, security.py, gemini.py, engine.py)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}.%"), int(180 * weight_mult)), else_=0)
+                            case(
+                                (
+                                    RepositoryFile.file_path.ilike(f"%/{t}.%"),
+                                    int(180 * weight_mult),
+                                ),
+                                else_=0,
+                            )
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}_%"), int(100 * weight_mult)), else_=0)
+                            case(
+                                (
+                                    RepositoryFile.file_path.ilike(f"%/{t}_%"),
+                                    int(100 * weight_mult),
+                                ),
+                                else_=0,
+                            )
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%_{t}.%"), int(100 * weight_mult)), else_=0)
+                            case(
+                                (
+                                    RepositoryFile.file_path.ilike(f"%_{t}.%"),
+                                    int(100 * weight_mult),
+                                ),
+                                else_=0,
+                            )
                         )
                         # Directory match (e.g. /parser/, /retrieval/, /github/, /embedding/, /ingestion/)
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(90 * weight_mult)), else_=0)
+                            case(
+                                (RepositoryFile.file_path.ilike(f"%/{t}/%"), int(90 * weight_mult)),
+                                else_=0,
+                            )
                         )
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%{t}%"), int(30 * weight_mult)), else_=0)
+                            case(
+                                (RepositoryFile.file_path.ilike(f"%{t}%"), int(30 * weight_mult)),
+                                else_=0,
+                            )
                         )
                     else:
                         # Generic filename terms require directory match
                         score_exprs.append(
-                            case((RepositoryFile.file_path.ilike(f"%/{t}/%"), int(50 * weight_mult)), else_=0)
+                            case(
+                                (RepositoryFile.file_path.ilike(f"%/{t}/%"), int(50 * weight_mult)),
+                                else_=0,
+                            )
                         )
 
-                    filter_conditions.append(and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%")))
+                    filter_conditions.append(
+                        and_(is_ast_chunk_cond, CodeChunk.symbol_name.ilike(f"%{t}%"))
+                    )
                     filter_conditions.append(RepositoryFile.file_path.ilike(f"%{t}%"))
 
                 if is_sqlite:
                     # SQLite fallback: filter in memory
                     c_rows_stmt = (
-                        select(CodeChunk.id, CodeChunk.symbol_name, CodeChunk.chunk_type, RepositoryFile.file_path)
+                        select(
+                            CodeChunk.id,
+                            CodeChunk.symbol_name,
+                            CodeChunk.chunk_type,
+                            RepositoryFile.file_path,
+                        )
                         .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
                         .where(CodeChunk.index_version_id.in_(active_version_ids))
                     )
@@ -379,7 +665,11 @@ class HybridSearchEngine:
                             ChunkType.METHOD,
                             ChunkType.INTERFACE,
                             ChunkType.MODULE,
-                            "class", "function", "method", "interface", "module",
+                            "class",
+                            "function",
+                            "method",
+                            "interface",
+                            "module",
                         }
 
                         for term in all_search_terms:
@@ -437,7 +727,12 @@ class HybridSearchEngine:
 
             # Retrieve chunk metadata for code-classification awareness
             chunks_info_stmt = (
-                select(CodeChunk.id, CodeChunk.chunk_type, RepositoryFile.file_path, CodeChunk.symbol_name)
+                select(
+                    CodeChunk.id,
+                    CodeChunk.chunk_type,
+                    RepositoryFile.file_path,
+                    CodeChunk.symbol_name,
+                )
                 .join(RepositoryFile, RepositoryFile.id == CodeChunk.file_id)
                 .where(CodeChunk.id.in_(all_chunk_ids))
             )
@@ -461,7 +756,10 @@ class HybridSearchEngine:
                     ChunkType.CLASS,
                     ChunkType.METHOD,
                     ChunkType.INTERFACE,
-                    "function", "class", "method", "interface",
+                    "function",
+                    "class",
+                    "method",
+                    "interface",
                 }
 
                 # Principled Code Entity & Intent Weighting
@@ -484,9 +782,9 @@ class HybridSearchEngine:
                 rrf_scores[chunk_id] = rrf_calc
 
             # Sort top chunk IDs by RRF score descending
-            sorted_chunk_ids = sorted(
-                all_chunk_ids, key=lambda cid: rrf_scores[cid], reverse=True
-            )[:top_k]
+            sorted_chunk_ids = sorted(all_chunk_ids, key=lambda cid: rrf_scores[cid], reverse=True)[
+                :top_k
+            ]
 
             # 6. Retrieve detailed Chunk records with file and commit lineage
             detailed_chunks_stmt = (
@@ -500,7 +798,9 @@ class HybridSearchEngine:
                 )
             )
             chunks_res = await session.execute(detailed_chunks_stmt)
-            chunk_records: dict[uuid.UUID, CodeChunk] = {c.id: c for c in chunks_res.scalars().all()}
+            chunk_records: dict[uuid.UUID, CodeChunk] = {
+                c.id: c for c in chunks_res.scalars().all()
+            }
 
             results: list[RetrievedEvidenceChunk] = []
             for cid in sorted_chunk_ids:

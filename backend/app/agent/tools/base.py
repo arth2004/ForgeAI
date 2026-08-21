@@ -46,7 +46,9 @@ class BaseRepositoryTool(ABC):
         ...
 
     @abstractmethod
-    async def aexecute(self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any) -> ToolExecutionResult:
+    async def aexecute(
+        self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
+    ) -> ToolExecutionResult:
         """Executes the tool with validated arguments and authorization context."""
         ...
 

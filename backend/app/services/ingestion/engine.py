@@ -504,10 +504,11 @@ class IngestionEngine:
 
                         if isinstance(exc, EmbeddingQuotaExhaustedException):
                             job_obj.error_message = exc.message
-                        elif "quota exhausted" in str(exc).lower() or "resource_exhausted" in str(exc).lower():
-                            job_obj.error_message = (
-                                "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased."
-                            )
+                        elif (
+                            "quota exhausted" in str(exc).lower()
+                            or "resource_exhausted" in str(exc).lower()
+                        ):
+                            job_obj.error_message = "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased."
                         else:
                             job_obj.error_message = sanitize_error(str(exc))
                         job_obj.completed_at = datetime.datetime.now(datetime.UTC)

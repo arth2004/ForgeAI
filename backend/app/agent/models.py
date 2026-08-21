@@ -1,5 +1,9 @@
+import asyncio
+import json
 import logging
+import random
 import re
+import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -22,10 +26,95 @@ logger = logging.getLogger(__name__)
 
 def sanitize_secret_text(text: str) -> str:
     """Redacts API keys and sensitive tokens from error messages."""
-    text = re.sub(r"AIza[0-9A-Za-z\-_]{10,}", "[REDACTED_API_KEY]", text)
-    text = re.sub(r"sk-[0-9A-Za-z\-_]{10,}", "[REDACTED_OPENAI_KEY]", text)
+    text = re.sub(r"\bAIza[0-9A-Za-z\-_]{10,}", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"\bgsk_[0-9A-Za-z\-_]{10,}", "[REDACTED_GROQ_KEY]", text)
+    text = re.sub(r"\bnvapi-[0-9A-Za-z\-_]{10,}", "[REDACTED_NVIDIA_KEY]", text)
+    text = re.sub(r"\bcsk-[0-9A-Za-z\-_]{10,}", "[REDACTED_CEREBRAS_KEY]", text)
+    text = re.sub(r"\bsk-[0-9A-Za-z\-_]{10,}", "[REDACTED_OPENAI_KEY]", text)
+    text = re.sub(r"(Bearer\s+)[0-9A-Za-z\-_\.]{10,}", r"\1[REDACTED_TOKEN]", text)
     text = re.sub(r"(key=)[^& \n\)]+", r"\1[REDACTED]", text)
     return text
+
+
+def extract_retry_delay(
+    response: httpx.Response,
+    attempt: int,
+    default_base: float = 1.5,
+) -> float:
+    """Calculates retry delay adhering to priority hierarchy:
+    1. Retry-After header (seconds)
+    2. x-ratelimit-reset-* headers
+    3. Provider retry-delay metadata (JSON payload)
+    4. Parsed error text
+    5. Bounded exponential backoff with jitter
+    """
+    # 1. Retry-After header
+    retry_after = response.headers.get("retry-after")
+    if retry_after:
+        try:
+            val = float(retry_after.strip())
+            return min(max(val, 0.1), 10.0)
+        except ValueError:
+            pass
+
+    # 2. x-ratelimit-reset-* headers
+    for hdr in [
+        "x-ratelimit-reset-requests",
+        "x-ratelimit-reset-tokens",
+        "x-ratelimit-reset",
+        "retry-after-ms",
+    ]:
+        reset_val = response.headers.get(hdr)
+        if reset_val:
+            try:
+                val = float(reset_val.strip())
+                if hdr == "retry-after-ms":
+                    val = val / 1000.0
+                elif val > 1_000_000_000_000:  # epoch ms
+                    val = (val / 1000.0) - time.time()
+                elif val > 1_000_000_000:  # epoch seconds
+                    val = val - time.time()
+                if val > 0:
+                    return min(val, 10.0)
+            except ValueError:
+                pass
+
+    # 3. Provider retry-delay metadata in JSON
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err_obj = data.get("error", {})
+            if isinstance(err_obj, dict):
+                for key in ["retry_after", "retry_delay", "retryAfter", "retryDelay"]:
+                    if key in err_obj:
+                        val = float(err_obj[key])
+                        return min(max(val, 0.1), 10.0)
+                details = err_obj.get("details", [])
+                if isinstance(details, list):
+                    for item in details:
+                        if isinstance(item, dict) and "retryDelay" in item:
+                            delay_str = str(item["retryDelay"]).rstrip("s")
+                            return min(max(float(delay_str), 0.1), 10.0)
+    except Exception:
+        pass
+
+    # 4. Parsed error text
+    err_text = response.text
+    match = re.search(
+        r"(?:try again in|retry in|wait)\s+([0-9\.]+)\s*(?:s|seconds)?",
+        err_text,
+        re.IGNORECASE,
+    )
+    if match:
+        try:
+            return min(float(match.group(1)) + 0.2, 10.0)
+        except ValueError:
+            pass
+
+    # 5. Bounded exponential backoff with jitter
+    jitter = random.uniform(0.0, 0.25)
+    backoff = (default_base * (2**attempt)) + jitter
+    return min(backoff, 10.0)
 
 
 class BaseChatModelProvider(ABC):
@@ -102,7 +191,9 @@ class MockChatModelProvider(BaseChatModelProvider):
         if isinstance(self.default_response, AIMessage):
             return AIMessage(
                 content=self.default_response.content,
-                tool_calls=list(self.default_response.tool_calls) if self.default_response.tool_calls else [],
+                tool_calls=list(self.default_response.tool_calls)
+                if self.default_response.tool_calls
+                else [],
                 id=str(uuid.uuid4()),
             )
         return AIMessage(content=self.default_response, id=str(uuid.uuid4()))
@@ -202,7 +293,9 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             }
         ]
 
-    def _convert_messages_to_gemini_payload(self, messages: Sequence[BaseMessage]) -> dict[str, Any]:
+    def _convert_messages_to_gemini_payload(
+        self, messages: Sequence[BaseMessage]
+    ) -> dict[str, Any]:
         contents = []
         system_instruction = None
 
@@ -217,26 +310,36 @@ class GeminiChatModelProvider(BaseChatModelProvider):
                     parts.append({"text": str(msg.content)})
                 tool_calls = getattr(msg, "tool_calls", None) or []
                 for tc in tool_calls:
-                    parts.append({
-                        "functionCall": {
-                            "name": tc.get("name"),
-                            "args": tc.get("args", {}),
+                    parts.append(
+                        {
+                            "functionCall": {
+                                "name": tc.get("name"),
+                                "args": tc.get("args", {}),
+                            }
                         }
-                    })
+                    )
                 if not parts:
                     parts.append({"text": ""})
                 contents.append({"role": "model", "parts": parts})
             elif isinstance(msg, ToolMessage):
-                tool_name = getattr(msg, "name", None) or getattr(msg, "tool_call_id", None) or "tool_result"
-                contents.append({
-                    "role": "function",
-                    "parts": [{
-                        "functionResponse": {
-                            "name": tool_name,
-                            "response": {"output": str(msg.content)},
-                        }
-                    }],
-                })
+                tool_name = (
+                    getattr(msg, "name", None)
+                    or getattr(msg, "tool_call_id", None)
+                    or "tool_result"
+                )
+                contents.append(
+                    {
+                        "role": "function",
+                        "parts": [
+                            {
+                                "functionResponse": {
+                                    "name": tool_name,
+                                    "response": {"output": str(msg.content)},
+                                }
+                            }
+                        ],
+                    }
+                )
             else:
                 contents.append({"role": "user", "parts": [{"text": str(msg.content)}]})
 
@@ -268,70 +371,105 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             "Content-Type": "application/json",
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
+        max_retries = 3
+        start_time = time.perf_counter()
 
-            if response.status_code != 200:
-                sanitized_error = sanitize_secret_text(response.text)
-                err_detail = sanitized_error
-                try:
-                    err_json = response.json()
-                    if isinstance(err_json, dict) and "error" in err_json:
-                        err_obj = err_json["error"]
-                        if isinstance(err_obj, dict) and "message" in err_obj:
-                            err_detail = err_obj["message"]
-                except Exception:
-                    pass
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    response = await client.post(url, headers=headers, json=payload)
 
-                if response.status_code == 404:
-                    raise ModelProviderException(
-                        message=f"Gemini model '{self.model_name}' is unavailable or unsupported: {err_detail}",
-                        provider=self.provider_name,
-                        status_code=404,
+                if response.status_code == 429 and attempt < max_retries:
+                    wait_seconds = extract_retry_delay(response, attempt)
+                    logger.warning(
+                        f"[agent.model.rate_limited] provider={self.provider_name} "
+                        f"model={self.model_name} attempt={attempt + 1}/{max_retries} "
+                        f"retry_delay_seconds={wait_seconds:.2f}"
                     )
-                raise ModelProviderException(
-                    message=f"Gemini API returned status {response.status_code}: {err_detail}",
-                    provider=self.provider_name,
-                    status_code=response.status_code,
+                    await asyncio.sleep(wait_seconds)
+                    continue
+
+                if response.status_code != 200:
+                    sanitized_error = sanitize_secret_text(response.text)
+                    err_detail = sanitized_error
+                    try:
+                        err_json = response.json()
+                        if isinstance(err_json, dict) and "error" in err_json:
+                            err_obj = err_json["error"]
+                            if isinstance(err_obj, dict) and "message" in err_obj:
+                                err_detail = err_obj["message"]
+                    except Exception:
+                        pass
+
+                    if response.status_code == 404:
+                        raise ModelProviderException(
+                            message=f"Gemini model '{self.model_name}' is unavailable or unsupported: {err_detail}",
+                            provider=self.provider_name,
+                            status_code=404,
+                        )
+                    raise ModelProviderException(
+                        message=f"Gemini API returned status {response.status_code}: {err_detail}",
+                        provider=self.provider_name,
+                        status_code=response.status_code,
+                    )
+
+                data = response.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    return AIMessage(content="")
+
+                parts = candidates[0].get("content", {}).get("parts", [])
+                text_parts: list[str] = []
+                tool_calls: list[dict[str, Any]] = []
+
+                for part in parts:
+                    if "text" in part and part["text"]:
+                        text_parts.append(part["text"])
+                    if "functionCall" in part:
+                        fc = part["functionCall"]
+                        tool_calls.append(
+                            {
+                                "name": fc.get("name"),
+                                "args": fc.get("args", {}),
+                                "id": str(uuid.uuid4()),
+                            }
+                        )
+
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                logger.info(
+                    f"[agent.model.invoked] provider={self.provider_name} "
+                    f"model={self.model_name} duration_ms={duration_ms} "
+                    f"retries_used={attempt} tool_calls_count={len(tool_calls)}"
                 )
 
-            data = response.json()
-            candidates = data.get("candidates", [])
-            if not candidates:
-                return AIMessage(content="")
+                text_content = "".join(text_parts)
+                return AIMessage(content=text_content, tool_calls=tool_calls)
 
-            parts = candidates[0].get("content", {}).get("parts", [])
-            text_parts: list[str] = []
-            tool_calls: list[dict[str, Any]] = []
+            except ModelProviderException:
+                raise
+            except Exception as e:
+                sanitized = sanitize_secret_text(str(e))
+                logger.error(
+                    f"[agent.model.error] provider={self.provider_name} model={self.model_name} error={sanitized}"
+                )
+                raise ModelProviderException(
+                    message=f"Gemini connection failed: {sanitized}",
+                    provider=self.provider_name,
+                ) from None
 
-            for part in parts:
-                if "text" in part and part["text"]:
-                    text_parts.append(part["text"])
-                if "functionCall" in part:
-                    fc = part["functionCall"]
-                    tool_calls.append({
-                        "name": fc.get("name"),
-                        "args": fc.get("args", {}),
-                        "id": str(uuid.uuid4()),
-                    })
-
-            text_content = "".join(text_parts)
-            return AIMessage(content=text_content, tool_calls=tool_calls)
-
-        except ModelProviderException:
-            raise
-        except Exception as e:
-            sanitized = sanitize_secret_text(str(e))
-            logger.error(f"Gemini chat invocation error: {sanitized}")
-            raise ModelProviderException(
-                message=f"Gemini connection failed: {sanitized}",
-                provider=self.provider_name,
-            ) from None
+        raise ModelProviderException(
+            message=f"Gemini API rate limit exceeded after {max_retries} retries.",
+            provider=self.provider_name,
+            status_code=429,
+        )
 
 
 class OpenAIChatModelProvider(BaseChatModelProvider):
-    """OpenAI chat completions provider using direct HTTPS API."""
+    """OpenAI-compatible chat completions provider.
+
+    Supports OpenAI, Groq, NVIDIA NIM, Cerebras, OpenRouter, and any provider
+    exposing the standard ``/v1/chat/completions`` endpoint.
+    """
 
     def __init__(
         self,
@@ -340,22 +478,135 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
         temperature: float = 0.2,
         max_tokens: int | None = 4096,
         timeout_seconds: float = 60.0,
+        base_url: str = "https://api.openai.com/v1",
+        provider_label: str = "openai",
     ):
         super().__init__(model_name=model_name, temperature=temperature, max_tokens=max_tokens)
         self._api_key = api_key or settings.OPENAI_API_KEY
         self._timeout = timeout_seconds
+        self._base_url = base_url.rstrip("/")
+        self._provider_label = provider_label
 
     @property
     def provider_name(self) -> str:
-        return "openai"
+        return self._provider_label
 
-    def _convert_messages_to_openai_payload(self, messages: Sequence[BaseMessage]) -> list[dict[str, str]]:
-        formatted = []
+    def _get_openai_tools_declaration(self) -> list[dict[str, Any]]:
+        """Returns OpenAI-format function declarations for Phase 4 repository tools."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_repository",
+                    "description": (
+                        "Searches repository code and documentation using dense and sparse hybrid retrieval. "
+                        "Use for conceptual inquiries, feature discovery, and locating implementations."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query to match against code and docs.",
+                            },
+                            "top_k": {
+                                "type": "integer",
+                                "description": "Maximum number of evidence chunks to retrieve (default: 5).",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_symbol",
+                    "description": (
+                        "Searches AST symbol declarations (classes, functions, methods, interfaces) in the repository."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol_name": {
+                                "type": "string",
+                                "description": "The symbol identifier to search for (e.g. 'verify_jwt_token').",
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum symbol results to return (default: 10).",
+                            },
+                        },
+                        "required": ["symbol_name"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_file",
+                    "description": (
+                        "Retrieves the content of a specific repository source file with optional line slicing."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "file_path": {
+                                "type": "string",
+                                "description": "Repository relative file path (e.g. 'app/core/security.py').",
+                            },
+                            "start_line": {
+                                "type": "integer",
+                                "description": "Optional starting line number (1-indexed).",
+                            },
+                            "end_line": {
+                                "type": "integer",
+                                "description": "Optional ending line number (1-indexed).",
+                            },
+                        },
+                        "required": ["file_path"],
+                    },
+                },
+            },
+        ]
+
+    def _convert_messages_to_openai_payload(
+        self, messages: Sequence[BaseMessage]
+    ) -> list[dict[str, Any]]:
+        formatted: list[dict[str, Any]] = []
         for msg in messages:
             if isinstance(msg, SystemMessage):
                 formatted.append({"role": "system", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted.append({"role": "assistant", "content": str(msg.content)})
+                entry: dict[str, Any] = {"role": "assistant"}
+                tool_calls = getattr(msg, "tool_calls", None) or []
+                if tool_calls:
+                    entry["content"] = str(msg.content) if msg.content else None
+                    entry["tool_calls"] = [
+                        {
+                            "id": tc.get("id", str(uuid.uuid4())),
+                            "type": "function",
+                            "function": {
+                                "name": tc.get("name"),
+                                "arguments": json.dumps(tc.get("args", {})),
+                            },
+                        }
+                        for tc in tool_calls
+                    ]
+                else:
+                    entry["content"] = str(msg.content)
+                formatted.append(entry)
+            elif isinstance(msg, ToolMessage):
+                tool_call_id = getattr(msg, "tool_call_id", None) or str(uuid.uuid4())
+                formatted.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": str(msg.content),
+                    }
+                )
+            elif isinstance(msg, HumanMessage):
+                formatted.append({"role": "user", "content": str(msg.content)})
             else:
                 formatted.append({"role": "user", "content": str(msg.content)})
         return formatted
@@ -363,7 +614,7 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
     async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         if not self._api_key:
             raise ModelProviderException(
-                message="OPENAI_API_KEY is not configured in settings or environment.",
+                message=f"API key for {self.provider_name} provider is not configured in settings or environment.",
                 provider=self.provider_name,
             )
 
@@ -372,54 +623,104 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
             "model": self.model_name,
             "messages": formatted_messages,
             "temperature": self.temperature,
+            "tools": self._get_openai_tools_declaration(),
         }
         if self.max_tokens:
             payload["max_tokens"] = self.max_tokens
 
-        url = "https://api.openai.com/v1/chat/completions"
+        url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
+        max_retries = 3
+        start_time = time.perf_counter()
 
-            if response.status_code != 200:
-                sanitized_error = sanitize_secret_text(response.text)
-                err_detail = sanitized_error
-                try:
-                    err_json = response.json()
-                    if isinstance(err_json, dict) and "error" in err_json:
-                        err_obj = err_json["error"]
-                        if isinstance(err_obj, dict) and "message" in err_obj:
-                            err_detail = err_obj["message"]
-                except Exception:
-                    pass
-                raise ModelProviderException(
-                    message=f"OpenAI API returned status {response.status_code}: {err_detail}",
-                    provider=self.provider_name,
-                    status_code=response.status_code,
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+
+                if response.status_code == 429 and attempt < max_retries:
+                    wait_seconds = extract_retry_delay(response, attempt)
+                    logger.warning(
+                        f"[agent.model.rate_limited] provider={self.provider_name} "
+                        f"model={self.model_name} attempt={attempt + 1}/{max_retries} "
+                        f"retry_delay_seconds={wait_seconds:.2f}"
+                    )
+                    await asyncio.sleep(wait_seconds)
+                    continue
+
+                if response.status_code != 200:
+                    sanitized_error = sanitize_secret_text(response.text)
+                    err_detail = sanitized_error
+                    try:
+                        err_json = response.json()
+                        if isinstance(err_json, dict) and "error" in err_json:
+                            err_obj = err_json["error"]
+                            if isinstance(err_obj, dict) and "message" in err_obj:
+                                err_detail = err_obj["message"]
+                    except Exception:
+                        pass
+                    raise ModelProviderException(
+                        message=f"{self.provider_name} API returned status {response.status_code}: {err_detail}",
+                        provider=self.provider_name,
+                        status_code=response.status_code,
+                    )
+
+                data = response.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    return AIMessage(content="")
+
+                message_data = choices[0].get("message", {})
+                content = message_data.get("content", "") or ""
+                raw_tool_calls = message_data.get("tool_calls") or []
+
+                tool_calls: list[dict[str, Any]] = []
+                for tc in raw_tool_calls:
+                    func = tc.get("function", {})
+                    args_str = func.get("arguments", "{}")
+                    try:
+                        args = json.loads(args_str)
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                    tool_calls.append(
+                        {
+                            "name": func.get("name"),
+                            "args": args,
+                            "id": tc.get("id", str(uuid.uuid4())),
+                        }
+                    )
+
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                logger.info(
+                    f"[agent.model.invoked] provider={self.provider_name} "
+                    f"model={self.model_name} duration_ms={duration_ms} "
+                    f"retries_used={attempt} tool_calls_count={len(tool_calls)}"
                 )
 
-            data = response.json()
-            choices = data.get("choices", [])
-            if not choices:
-                return AIMessage(content="")
+                return AIMessage(content=content, tool_calls=tool_calls)
 
-            content = choices[0].get("message", {}).get("content", "")
-            return AIMessage(content=content)
+            except ModelProviderException:
+                raise
+            except Exception as e:
+                sanitized = sanitize_secret_text(str(e))
+                logger.error(
+                    f"[agent.model.error] provider={self.provider_name} "
+                    f"model={self.model_name} error={sanitized}"
+                )
+                raise ModelProviderException(
+                    message=f"{self.provider_name} connection failed: {sanitized}",
+                    provider=self.provider_name,
+                ) from None
 
-        except ModelProviderException:
-            raise
-        except Exception as e:
-            sanitized = sanitize_secret_text(str(e))
-            logger.error(f"OpenAI chat invocation error: {sanitized}")
-            raise ModelProviderException(
-                message=f"OpenAI connection failed: {sanitized}",
-                provider=self.provider_name,
-            ) from None
+        raise ModelProviderException(
+            message=f"{self.provider_name} API rate limit exceeded after {max_retries} retries.",
+            provider=self.provider_name,
+            status_code=429,
+        )
 
 
 def get_chat_model_provider(
@@ -446,6 +747,26 @@ def get_chat_model_provider(
             model_name=model_name or settings.AGENT_OPENAI_MODEL,
             temperature=temp,
             max_tokens=tokens,
+            base_url="https://api.openai.com/v1",
+            provider_label="openai",
+        )
+    elif prov == "groq":
+        return OpenAIChatModelProvider(
+            api_key=api_key or settings.GROQ_API_KEY,
+            model_name=model_name or settings.GROQ_MODEL,
+            temperature=temp,
+            max_tokens=tokens,
+            base_url=settings.GROQ_BASE_URL,
+            provider_label="groq",
+        )
+    elif prov == "openai_compatible":
+        return OpenAIChatModelProvider(
+            api_key=api_key or settings.OPENAI_COMPATIBLE_API_KEY,
+            model_name=model_name or settings.OPENAI_COMPATIBLE_MODEL,
+            temperature=temp,
+            max_tokens=tokens,
+            base_url=settings.OPENAI_COMPATIBLE_BASE_URL,
+            provider_label="openai_compatible",
         )
     elif prov in {"google", "gemini"}:
         return GeminiChatModelProvider(
@@ -456,6 +777,6 @@ def get_chat_model_provider(
         )
     else:
         raise ModelProviderException(
-            message=f"Unsupported chat model provider: '{prov}'. Supported: 'google', 'openai', 'mock'.",
+            message=f"Unsupported chat model provider: '{prov}'. Supported: 'google', 'openai', 'groq', 'openai_compatible', 'mock'.",
             provider=prov,
         )

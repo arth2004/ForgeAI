@@ -16,9 +16,11 @@ from app.models.project import IndexingStatus, Project, Repository
 
 def _make_graph_builder(provider: MockChatModelProvider):
     """Helper creating a bound build_agent_graph override preventing duplicate kwarg errors."""
+
     def _builder(**kwargs):
         kwargs.pop("model_provider", None)
         return build_agent_graph(model_provider=provider, **kwargs)
+
     return _builder
 
 
@@ -358,9 +360,7 @@ async def test_agent_chat_sse_streaming_with_tool_lifecycle(
     with patch("app.services.agent_service.build_agent_graph") as mock_build_graph:
         mock_build_graph.side_effect = _make_graph_builder(mock_provider)
 
-        response = await client.post(
-            "/api/v1/agent/chat", json=payload, headers=auth_headers
-        )
+        response = await client.post("/api/v1/agent/chat", json=payload, headers=auth_headers)
 
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
@@ -417,8 +417,10 @@ async def test_agent_chat_timeout_handling(
         ),
         patch("app.services.agent_service.build_agent_graph") as mock_build_graph,
     ):
+
         async def _slow_ainvoke(*args, **kwargs):
             import asyncio
+
             await asyncio.sleep(0.05)
             return {}
 

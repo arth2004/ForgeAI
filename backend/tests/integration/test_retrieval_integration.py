@@ -24,11 +24,15 @@ async def test_hybrid_search_end_to_end_ranking(db_session: AsyncSession):
     db_session.add(project)
 
     repo_id = uuid.uuid4()
-    repo = Repository(id=repo_id, project_id=project_id, full_name="org/retrieval-test", default_branch="main")
+    repo = Repository(
+        id=repo_id, project_id=project_id, full_name="org/retrieval-test", default_branch="main"
+    )
     db_session.add(repo)
 
     branch_id = uuid.uuid4()
-    branch = RepositoryBranch(id=branch_id, repository_id=repo_id, name="main", latest_commit_sha="a" * 40)
+    branch = RepositoryBranch(
+        id=branch_id, repository_id=repo_id, name="main", latest_commit_sha="a" * 40
+    )
     db_session.add(branch)
 
     version_id = uuid.uuid4()
@@ -102,8 +106,24 @@ async def test_hybrid_search_end_to_end_ranking(db_session: AsyncSession):
 
     # 4. Add Dummy Embeddings (768d)
     emb_vector = [0.1] * 768
-    db_session.add(ChunkEmbedding(id=uuid.uuid4(), repository_id=repo_id, chunk_id=code_chunk.id, index_version_id=version_id, embedding=emb_vector))
-    db_session.add(ChunkEmbedding(id=uuid.uuid4(), repository_id=repo_id, chunk_id=doc_chunk.id, index_version_id=version_id, embedding=emb_vector))
+    db_session.add(
+        ChunkEmbedding(
+            id=uuid.uuid4(),
+            repository_id=repo_id,
+            chunk_id=code_chunk.id,
+            index_version_id=version_id,
+            embedding=emb_vector,
+        )
+    )
+    db_session.add(
+        ChunkEmbedding(
+            id=uuid.uuid4(),
+            repository_id=repo_id,
+            chunk_id=doc_chunk.id,
+            index_version_id=version_id,
+            embedding=emb_vector,
+        )
+    )
 
     await db_session.commit()
 

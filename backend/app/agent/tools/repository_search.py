@@ -60,7 +60,9 @@ class RepositorySearchTool(BaseRepositoryTool):
     def args_schema(self) -> type[BaseModel]:
         return RepositorySearchInput
 
-    async def aexecute(self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any) -> ToolExecutionResult:
+    async def aexecute(
+        self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
+    ) -> ToolExecutionResult:
         query_raw = kwargs.get("query", "")
         project_id_raw = kwargs.get("project_id")
         repository_id_raw = kwargs.get("repository_id")

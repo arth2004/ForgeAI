@@ -74,7 +74,10 @@ class Repository(Base, UUIDMixin, TimestampMixin):
 
     project: Mapped["Project"] = relationship("Project", back_populates="repositories")
     branches: Mapped[list["RepositoryBranch"]] = relationship(
-        "RepositoryBranch", back_populates="repository", cascade="all, delete-orphan", lazy="selectin"
+        "RepositoryBranch",
+        back_populates="repository",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 

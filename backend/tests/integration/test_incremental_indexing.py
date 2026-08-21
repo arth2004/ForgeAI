@@ -329,7 +329,10 @@ async def test_quota_exhausted_indexing_failure_preserves_active_and_sets_user_f
         # 3. Check that the job status is FAILED with the exact safe user-facing message
         await db_session.refresh(job)
         assert job.status == IndexingJobStatus.FAILED
-        assert job.error_message == "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased."
+        assert (
+            job.error_message
+            == "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased."
+        )
 
         # Verify no secret leakage in error message
         assert "AIza" not in job.error_message
@@ -446,10 +449,14 @@ async def test_superseded_version_cleanup_retention(
     # Check that deleted version's chunks and embeddings were deleted via cascade
     oldest_deleted_id = superseded_versions[0].id
     old_chunks = (
-        await db_session.execute(
-            select(CodeChunk).where(CodeChunk.index_version_id == oldest_deleted_id)
+        (
+            await db_session.execute(
+                select(CodeChunk).where(CodeChunk.index_version_id == oldest_deleted_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(old_chunks) == 0
 
     # Idempotency check: running cleanup again deletes 0
@@ -491,4 +498,3 @@ async def test_concurrency_guard_rejects_duplicate_active_indexing(
 
     assert exc_info.value.status_code == 409
     assert "already in progress" in str(exc_info.value)
-

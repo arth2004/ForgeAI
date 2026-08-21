@@ -101,9 +101,7 @@ class AgentService:
             if not found_repo:
                 raise NotFoundException("Repository", repository_id)
             if found_repo.project_id != project_id:
-                raise ConflictException(
-                    f"Repository {repository_id} belongs to another project."
-                )
+                raise ConflictException(f"Repository {repository_id} belongs to another project.")
             target_repo = found_repo
         else:
             primary_repo_q = (
@@ -184,11 +182,7 @@ class AgentService:
             commit_sha = item.get("commit_sha")
 
             # Support line_range dict from get_file tool
-            if (
-                start_line is None
-                and "line_range" in item
-                and isinstance(item["line_range"], dict)
-            ):
+            if start_line is None and "line_range" in item and isinstance(item["line_range"], dict):
                 start_line = item["line_range"].get("start")
                 end_line = item["line_range"].get("end")
 

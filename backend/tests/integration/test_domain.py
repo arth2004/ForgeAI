@@ -99,7 +99,11 @@ async def test_delete_project_lifecycle_and_security(client: AsyncClient):
     # 1. Register User 1
     u1_resp = await client.post(
         "/api/v1/auth/register",
-        json={"email": "owner@domain.com", "password": "Password123!", "organization_name": "Org Alpha"},
+        json={
+            "email": "owner@domain.com",
+            "password": "Password123!",
+            "organization_name": "Org Alpha",
+        },
     )
     u1_token = u1_resp.json()["access_token"]
     u1_headers = {"Authorization": f"Bearer {u1_token}"}
@@ -125,7 +129,11 @@ async def test_delete_project_lifecycle_and_security(client: AsyncClient):
     # 2. Register User 2 (unauthorized tenant)
     u2_resp = await client.post(
         "/api/v1/auth/register",
-        json={"email": "attacker@domain.com", "password": "Password123!", "organization_name": "Org Beta"},
+        json={
+            "email": "attacker@domain.com",
+            "password": "Password123!",
+            "organization_name": "Org Beta",
+        },
     )
     u2_token = u2_resp.json()["access_token"]
     u2_headers = {"Authorization": f"Bearer {u2_token}"}
@@ -145,6 +153,7 @@ async def test_delete_project_lifecycle_and_security(client: AsyncClient):
 
     # 5. Delete on non-existent project returns 404 Not Found
     import uuid
+
     random_id = str(uuid.uuid4())
     del_nonexistent = await client.delete(f"/api/v1/projects/{random_id}", headers=u1_headers)
     assert del_nonexistent.status_code == 404

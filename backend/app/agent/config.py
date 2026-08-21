@@ -34,6 +34,10 @@ class AgentConfig:
             model_name = model_override
         elif provider == "openai":
             model_name = settings.AGENT_OPENAI_MODEL
+        elif provider == "groq":
+            model_name = settings.GROQ_MODEL
+        elif provider == "openai_compatible":
+            model_name = settings.OPENAI_COMPATIBLE_MODEL or "gpt-4o"
         elif provider == "mock":
             model_name = "mock-model"
         else:
@@ -51,9 +55,7 @@ class AgentConfig:
             timeout_seconds=timeout_override
             if timeout_override is not None
             else settings.AGENT_TIMEOUT_SECONDS,
-            max_iterations=max_iterations_override
-            if max_iterations_override is not None
-            else 5,
+            max_iterations=max_iterations_override if max_iterations_override is not None else 5,
             system_prompt=system_prompt_override,
         )
 

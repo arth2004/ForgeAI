@@ -13,7 +13,9 @@ from app.services.embedding.base import EmbeddingProvider
 logger = logging.getLogger(__name__)
 
 
-def parse_retry_delay(response_data: dict[str, Any], headers: httpx.Headers | dict[str, str] | None = None) -> float | None:
+def parse_retry_delay(
+    response_data: dict[str, Any], headers: httpx.Headers | dict[str, str] | None = None
+) -> float | None:
     """Extracts suggested retry delay in seconds from Gemini error details or HTTP headers."""
     # 1. Check Retry-After header
     if headers:
@@ -68,7 +70,9 @@ def is_daily_or_project_quota_exhaustion(response_data: dict[str, Any], status_c
         quota_metric = str(metadata.get("quota_metric", "")).lower()
         quota_id = str(metadata.get("quota_id", "")).lower()
 
-        if any(term in quota_metric for term in ("perday", "per_day", "daily", "free_tier_requests")):
+        if any(
+            term in quota_metric for term in ("perday", "per_day", "daily", "free_tier_requests")
+        ):
             if "minute" not in quota_metric:
                 return True
         if any(term in quota_id for term in ("perday", "per_day", "daily", "freetier")):

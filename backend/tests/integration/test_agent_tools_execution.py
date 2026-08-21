@@ -134,9 +134,7 @@ async def test_get_file_non_existent_file_handling(
 
 
 @pytest.mark.asyncio
-async def test_tool_authorization_tenant_isolation(
-    db_session: AsyncSession, indexed_tool_repo
-):
+async def test_tool_authorization_tenant_isolation(db_session: AsyncSession, indexed_tool_repo):
     """Verifies that unauthorized users from other organizations cannot execute repository tools."""
     project = indexed_tool_repo["project"]
     unauthorized_user_id = uuid.uuid4()
@@ -165,7 +163,9 @@ async def test_tool_index_status_guard_rejects_unindexed_repo(
     membership = Membership(user_id=test_user.id, organization_id=org.id, role=Role.owner)
     db_session.add(membership)
 
-    project = Project(organization_id=org.id, name="Unindexed Project", description="Test unindexed")
+    project = Project(
+        organization_id=org.id, name="Unindexed Project", description="Test unindexed"
+    )
     db_session.add(project)
     await db_session.flush()
 

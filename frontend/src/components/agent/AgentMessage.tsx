@@ -4,6 +4,7 @@ import React from "react";
 import { ChatMessage } from "@/types";
 import { AgentActivity } from "./AgentActivity";
 import { AgentSources } from "./AgentSources";
+import { AgentPlanView } from "./AgentPlanView";
 import { Sparkles, User, AlertCircle, Loader2 } from "lucide-react";
 
 interface AgentMessageProps {
@@ -71,6 +72,16 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </div>
           )}
 
+          {/* Phase 5B Implementation Plan Card & Gate 1 Approval */}
+          {message.plan && (
+            <AgentPlanView
+              plan={message.plan}
+              approvalId={message.approvalId}
+              initialApprovalStatus={message.approvalStatus || "PENDING"}
+              initialWorkspace={message.workspace}
+            />
+          )}
+
           {/* Sources Citations */}
           {message.sources && message.sources.length > 0 && (
             <AgentSources sources={message.sources} />
@@ -93,3 +104,4 @@ export function AgentMessage({ message }: AgentMessageProps) {
     </div>
   );
 }
+

@@ -269,7 +269,6 @@ async def test_trigger_indexing_concurrency_returns_active_job(
         mock_arq_pool.enqueue_job.assert_not_called()
 
 
-
 @pytest.mark.asyncio
 async def test_hybrid_search_evidence_retrieval(
     client: AsyncClient,

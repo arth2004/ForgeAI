@@ -112,12 +112,41 @@ class Settings(BaseSettings):
     )
 
     # Phase 4A Agent Foundation Settings
-    AGENT_DEFAULT_PROVIDER: str = Field(default="google", description="Default LLM provider: google, openai, or mock")
-    AGENT_GEMINI_MODEL: str = Field(default="gemini-3.1-pro-preview", description="Default Google Gemini chat model")
+    AGENT_DEFAULT_PROVIDER: str = Field(
+        default="google",
+        description="Default LLM provider: google, openai, groq, openai_compatible, or mock",
+    )
+    AGENT_GEMINI_MODEL: str = Field(
+        default="gemini-3.1-pro-preview", description="Default Google Gemini chat model"
+    )
     AGENT_OPENAI_MODEL: str = Field(default="gpt-4o", description="Default OpenAI chat model")
-    AGENT_TEMPERATURE: float = Field(default=0.2, description="Default sampling temperature for agent reasoning")
+    AGENT_TEMPERATURE: float = Field(
+        default=0.2, description="Default sampling temperature for agent reasoning"
+    )
     AGENT_MAX_TOKENS: int | None = Field(default=4096, description="Maximum token generation limit")
-    AGENT_TIMEOUT_SECONDS: float = Field(default=60.0, description="Model invocation timeout in seconds")
+    AGENT_TIMEOUT_SECONDS: float = Field(
+        default=60.0, description="Model invocation timeout in seconds"
+    )
+
+    # Groq Provider (OpenAI-compatible)
+    GROQ_API_KEY: str = Field(default="", description="Groq API key from console.groq.com/keys")
+    GROQ_MODEL: str = Field(
+        default="openai/gpt-oss-120b", description="Default Groq model for agent reasoning"
+    )
+    GROQ_BASE_URL: str = Field(
+        default="https://api.groq.com/openai/v1", description="Groq API base URL"
+    )
+
+    # Generic OpenAI-compatible provider (NVIDIA NIM, Cerebras, OpenRouter, etc.)
+    OPENAI_COMPATIBLE_API_KEY: str = Field(
+        default="", description="API key for any OpenAI-compatible provider"
+    )
+    OPENAI_COMPATIBLE_BASE_URL: str = Field(
+        default="", description="Base URL for OpenAI-compatible provider"
+    )
+    OPENAI_COMPATIBLE_MODEL: str = Field(
+        default="", description="Model name for OpenAI-compatible provider"
+    )
 
     # Frontend URL
     FRONTEND_URL: str = Field(default="http://localhost:3000")
@@ -128,4 +157,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

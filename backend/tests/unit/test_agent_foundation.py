@@ -59,7 +59,7 @@ def test_agent_state_with_custom_messages():
 def test_agent_config_from_settings_and_overrides():
     """Verifies AgentConfig initialization from settings and runtime overrides."""
     config_default = AgentConfig.from_settings()
-    assert config_default.provider in {"google", "openai", "mock"}
+    assert config_default.provider in {"google", "openai", "groq", "openai_compatible", "mock"}
     assert config_default.temperature == 0.2
     assert config_default.max_tokens == 4096
 
@@ -99,16 +99,16 @@ async def test_mock_chat_model_provider():
     assert mock_model.call_history[0] == messages
 
     # Test response override
-    override_resp = await mock_model.ainvoke(messages, response_override="Custom override response.")
+    override_resp = await mock_model.ainvoke(
+        messages, response_override="Custom override response."
+    )
     assert override_resp.content == "Custom override response."
 
 
 @pytest.mark.asyncio
 async def test_mock_chat_model_provider_failure():
     """Verifies that MockChatModelProvider raises ModelProviderException when should_fail=True."""
-    failing_model = MockChatModelProvider(
-        should_fail=True, failure_message="Rate limit simulated."
-    )
+    failing_model = MockChatModelProvider(should_fail=True, failure_message="Rate limit simulated.")
 
     with pytest.raises(ModelProviderException) as exc_info:
         await failing_model.ainvoke([HumanMessage(content="test")])
@@ -180,7 +180,9 @@ def test_gemini_provider_function_calling_payload():
             content="",
             tool_calls=[{"name": "search_repository", "args": {"query": "auth"}, "id": "c1"}],
         ),
-        ToolMessage(content='{"results": ["auth.py"]}', tool_call_id="c1", name="search_repository"),
+        ToolMessage(
+            content='{"results": ["auth.py"]}', tool_call_id="c1", name="search_repository"
+        ),
     ]
 
     payload = provider._convert_messages_to_gemini_payload(messages)

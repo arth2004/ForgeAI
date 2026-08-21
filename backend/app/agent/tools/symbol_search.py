@@ -67,7 +67,9 @@ class SymbolSearchTool(BaseRepositoryTool):
     def args_schema(self) -> type[BaseModel]:
         return SymbolSearchInput
 
-    async def aexecute(self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any) -> ToolExecutionResult:
+    async def aexecute(
+        self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
+    ) -> ToolExecutionResult:
         sym_raw = kwargs.get("symbol_name", "")
         project_id_raw = kwargs.get("project_id")
         repository_id_raw = kwargs.get("repository_id")
@@ -130,16 +132,16 @@ class SymbolSearchTool(BaseRepositoryTool):
         formatted_symbols = []
         for c in chunks:
             branch_name = (
-                c.index_version.branch.name
-                if c.index_version and c.index_version.branch
-                else ""
+                c.index_version.branch.name if c.index_version and c.index_version.branch else ""
             )
             commit_sha = c.index_version.commit_sha if c.index_version else ""
 
             formatted_symbols.append(
                 {
                     "symbol_name": c.symbol_name,
-                    "chunk_type": c.chunk_type.value if hasattr(c.chunk_type, "value") else str(c.chunk_type),
+                    "chunk_type": c.chunk_type.value
+                    if hasattr(c.chunk_type, "value")
+                    else str(c.chunk_type),
                     "file_path": c.file.file_path if c.file else "",
                     "start_line": c.start_line,
                     "end_line": c.end_line,

@@ -14,9 +14,7 @@ from app.models.auth import User
 
 
 @pytest.mark.asyncio
-async def test_agent_reasoning_direct_answer_no_tools(
-    db_session: AsyncSession, test_user: User
-):
+async def test_agent_reasoning_direct_answer_no_tools(db_session: AsyncSession, test_user: User):
     """Scenario A: General question answered directly by the agent without any tool calls."""
     direct_answer = AIMessage(
         content="Forge AI is a repository intelligence and code reasoning engine."

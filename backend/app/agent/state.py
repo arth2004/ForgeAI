@@ -11,6 +11,7 @@ class AgentState(TypedDict, total=False):
     Represents the operational context passed across LangGraph nodes.
     """
 
+    # Existing Phase 4 fields
     user_query: str
     messages: Annotated[list[BaseMessage], add_messages]
     project_id: str | None
@@ -22,6 +23,15 @@ class AgentState(TypedDict, total=False):
     final_answer: str | None
     iteration_count: int
     metadata: dict[str, Any]
+
+    # Phase 5B Planning & Workspace State
+    implementation_plan: dict[str, Any] | None
+    affected_files: list[dict[str, Any]]
+    investigation_summary: str | None
+    proposed_tests: list[str]
+    workspace_id: str | None
+    approval_status: str | None
+    lifecycle_state: str | None
 
 
 def create_initial_state(
@@ -52,4 +62,12 @@ def create_initial_state(
         final_answer=None,
         iteration_count=0,
         metadata=metadata or {},
+        implementation_plan=None,
+        affected_files=[],
+        investigation_summary=None,
+        proposed_tests=[],
+        workspace_id=None,
+        approval_status="none",
+        lifecycle_state="IDLE",
     )
+

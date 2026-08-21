@@ -45,10 +45,7 @@ async def test_agent_graph_execution_with_mock_model():
     assert messages[1].content == "Tree-sitter parser is implemented in chunker.py"
 
     # 2. Verify final_answer
-    assert (
-        result_state.get("final_answer")
-        == "Tree-sitter parser is implemented in chunker.py"
-    )
+    assert result_state.get("final_answer") == "Tree-sitter parser is implemented in chunker.py"
 
     # 3. Verify contextual fields are preserved
     assert result_state.get("repository_id") == "repo-001"

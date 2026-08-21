@@ -8,7 +8,9 @@ from app.agent.exceptions import AgentException
 class ToolValidationError(AgentException):
     """Raised when tool input validation fails."""
 
-    def __init__(self, message: str, field_name: str | None = None, details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str, field_name: str | None = None, details: dict[str, Any] | None = None
+    ):
         det = details or {}
         if field_name:
             det["field_name"] = field_name
@@ -25,7 +27,9 @@ class ToolAuthorizationError(AgentException):
 class RepositoryNotIndexedError(AgentException):
     """Raised when a repository or branch lacks an ACTIVE index version."""
 
-    def __init__(self, message: str = "The selected repository does not have an ACTIVE index version."):
+    def __init__(
+        self, message: str = "The selected repository does not have an ACTIVE index version."
+    ):
         super().__init__(message=message, status_code=404)
 
 
@@ -105,7 +109,9 @@ def validate_safe_file_path(file_path: str) -> str:
     # Normalize forward slashes and strip leading slashes
     normalized = cleaned.replace("\\", "/").lstrip("/")
     if not normalized:
-        raise ToolValidationError("File path cannot resolve to an empty path.", field_name="file_path")
+        raise ToolValidationError(
+            "File path cannot resolve to an empty path.", field_name="file_path"
+        )
 
     return normalized
 
@@ -122,7 +128,9 @@ def validate_top_k(top_k: int | None, default: int = 5, min_k: int = 1, max_k: i
     return top_k
 
 
-def validate_uuid(val: str | uuid.UUID | None, field_name: str, required: bool = True) -> uuid.UUID | None:
+def validate_uuid(
+    val: str | uuid.UUID | None, field_name: str, required: bool = True
+) -> uuid.UUID | None:
     """Validates and parses UUID parameters."""
     if val is None:
         if required:

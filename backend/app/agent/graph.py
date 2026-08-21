@@ -214,8 +214,12 @@ async def tools_node(
         tool = get_agent_tool_by_name(tool_name)
         if not tool:
             err_msg = f"Tool '{tool_name}' is not registered."
-            logger.warning(f"[agent.tool.failed] tool={tool_name} call_id={call_id} error={err_msg}")
-            tool_messages.append(ToolMessage(content=json.dumps({"error": err_msg}), tool_call_id=call_id))
+            logger.warning(
+                f"[agent.tool.failed] tool={tool_name} call_id={call_id} error={err_msg}"
+            )
+            tool_messages.append(
+                ToolMessage(content=json.dumps({"error": err_msg}), tool_call_id=call_id)
+            )
             executed_results.append({"tool": tool_name, "success": False, "error": err_msg})
             return
 
@@ -225,14 +229,18 @@ async def tools_node(
             res = await tool.aexecute(db=session, user_id=user_uuid, **tool_args)
             tool_duration_ms = round((time.perf_counter() - start_tool_time) * 1000, 2)
 
-            tool_messages.append(ToolMessage(content=json.dumps(res.model_dump()), tool_call_id=call_id))
-            executed_results.append({
-                "tool": tool_name,
-                "success": res.success,
-                "data": res.data,
-                "error": res.error,
-                "duration_ms": tool_duration_ms,
-            })
+            tool_messages.append(
+                ToolMessage(content=json.dumps(res.model_dump()), tool_call_id=call_id)
+            )
+            executed_results.append(
+                {
+                    "tool": tool_name,
+                    "success": res.success,
+                    "data": res.data,
+                    "error": res.error,
+                    "duration_ms": tool_duration_ms,
+                }
+            )
 
             if res.success and isinstance(res.data, dict):
                 logger.info(
@@ -244,11 +252,13 @@ async def tools_node(
                 elif "symbols" in res.data and isinstance(res.data["symbols"], list):
                     new_retrieved_context.extend(res.data["symbols"])
                 elif "file_path" in res.data:
-                    new_retrieved_context.append({
-                        "file_path": res.data.get("file_path"),
-                        "content": res.data.get("content"),
-                        "line_range": res.data.get("line_range"),
-                    })
+                    new_retrieved_context.append(
+                        {
+                            "file_path": res.data.get("file_path"),
+                            "content": res.data.get("content"),
+                            "line_range": res.data.get("line_range"),
+                        }
+                    )
             else:
                 logger.warning(
                     f"[agent.tool.completed] tool={tool_name} call_id={call_id} "
@@ -263,14 +273,19 @@ async def tools_node(
                 f"duration_ms={tool_duration_ms} error={sanitized_err}"
             )
             tool_messages.append(
-                ToolMessage(content=json.dumps({"error": sanitized_err, "tool_name": tool_name}), tool_call_id=call_id)
+                ToolMessage(
+                    content=json.dumps({"error": sanitized_err, "tool_name": tool_name}),
+                    tool_call_id=call_id,
+                )
             )
-            executed_results.append({
-                "tool": tool_name,
-                "success": False,
-                "error": sanitized_err,
-                "duration_ms": tool_duration_ms,
-            })
+            executed_results.append(
+                {
+                    "tool": tool_name,
+                    "success": False,
+                    "error": sanitized_err,
+                    "duration_ms": tool_duration_ms,
+                }
+            )
 
     if db_session_override is not None:
         for tc in tool_calls:

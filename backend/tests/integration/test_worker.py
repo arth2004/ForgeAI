@@ -48,7 +48,9 @@ async def test_index_repository_task_execution():
 
     ctx = {}
 
-    with patch("app.services.ingestion.engine.IngestionEngine.run_indexing", new_callable=AsyncMock) as mock_engine:
+    with patch(
+        "app.services.ingestion.engine.IngestionEngine.run_indexing", new_callable=AsyncMock
+    ) as mock_engine:
         mock_engine.return_value = expected_version_id
 
         result = await index_repository_task(
@@ -70,4 +72,3 @@ async def test_index_repository_task_execution():
             is_full_reindex=True,
             job_id=uuid.UUID(job_id),
         )
-

@@ -1,4 +1,11 @@
-from app.models.agent import AgentSession
+from app.models.agent import (
+    AgentApproval,
+    AgentSession,
+    AgentWorkspace,
+    ApprovalStatus,
+    ApprovalType,
+    WorkspaceStatus,
+)
 from app.models.auth import Membership, Organization, Role, User
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.codebase import (
@@ -38,4 +45,10 @@ __all__ = [
     "IndexingJob",
     "IndexingJobStatus",
     "AgentSession",
+    "AgentWorkspace",
+    "AgentApproval",
+    "WorkspaceStatus",
+    "ApprovalType",
+    "ApprovalStatus",
 ]
+

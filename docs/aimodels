@@ -1,0 +1,45 @@
+Option 1: Cerebras (Fastest Speed & Generous Limits)
+Where to get API key: cloud.cerebras.ai (Free account, no credit card)
+Copy into .env:
+env
+AGENT_DEFAULT_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_API_KEY=csk-your-cerebras-key-here
+OPENAI_COMPATIBLE_BASE_URL=https://api.cerebras.ai/v1
+OPENAI_COMPATIBLE_MODEL=llama-3.3-70b
+Option 2: NVIDIA NIM (120+ Models & Reasoning Models)
+Where to get API key: build.nvidia.com/settings/api-keys (Free sign-up)
+Copy into .env:
+env
+AGENT_DEFAULT_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_API_KEY=nvapi-your-nvidia-key-here
+OPENAI_COMPATIBLE_BASE_URL=https://integrate.api.nvidia.com/v1
+OPENAI_COMPATIBLE_MODEL=meta/llama-3.3-70b-instruct
+Option 3: OpenRouter (All Free Open-Source Models)
+Where to get API key: openrouter.ai/workspaces/default/keys (Free sign-up)
+Copy into .env:
+env
+AGENT_DEFAULT_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_API_KEY=sk-or-v1-your-openrouter-key-here
+OPENAI_COMPATIBLE_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_COMPATIBLE_MODEL=meta-llama/llama-3.3-70b-instruct:free
+Option 4: GitHub Models (Free for every GitHub User)
+Where to get API key: Generate a Personal Access Token (Classic) at github.com/settings/tokens (no permissions/scopes needed)
+Copy into .env:
+env
+AGENT_DEFAULT_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_API_KEY=ghp_your_github_token_here
+OPENAI_COMPATIBLE_BASE_URL=https://models.inference.ai.azure.com
+OPENAI_COMPATIBLE_MODEL=gpt-4o-mini
+💡 Note on Groq:
+If you want to use Groq, you don't even need OPENAI_COMPATIBLE_* — you can just fill out the dedicated Groq section:
+
+env
+AGENT_DEFAULT_PROVIDER=groq
+GROQ_API_KEY=gsk_your_groq_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+(Get your key at console.groq.com/keys)
+
+Model rate limits on Groq free tier:
+- openai/gpt-oss-120b: 30 RPM, 1,000 RPD, 8K TPM, 200K TPD
+- llama-3.1-8b-instant: 30 RPM, 14,400 RPD, 6K TPM, 500K TPD
+- llama-3.3-70b-versatile: 30 RPM, 1,000 RPD, 6K TPM, 100K TPD

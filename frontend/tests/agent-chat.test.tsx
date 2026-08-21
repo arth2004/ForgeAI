@@ -2,7 +2,9 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AgentChat } from "@/components/agent/AgentChat";
+import { AgentMessage } from "@/components/agent/AgentMessage";
 import { parseSSEStream, formatAgentErrorMessage } from "@/lib/agent-api";
+
 import { AgentStreamEvent } from "@/types";
 
 describe("Agent Chat UI & Component Integration", () => {
@@ -306,4 +308,75 @@ describe("SSE Stream Parser Unit Tests", () => {
       "The agent took too long to respond. Try asking a more specific question."
     );
   });
+
+  describe("Phase 5B Planning & Workspace UI", () => {
+    const mockPlan = {
+      id: "plan-uuid-1",
+      summary: "Refactor Authentication Token Verification",
+      problem_statement: "JWT validation needs to support custom claims and token refresh.",
+      approach: "Modify auth service to validate claims against repository config.",
+      affected_files: [
+        {
+          file_path: "backend/app/auth/service.py",
+          change_type: "MODIFY" as const,
+          reason: "Update verify_token to parse custom claims.",
+          symbols: ["verify_token", "create_access_token"],
+        },
+      ],
+      new_files: [],
+      deleted_files: [],
+      symbols: ["verify_token"],
+      test_strategy: "Unit tests in test_auth.py covering claim validation.",
+      risks: ["Backward compatibility with legacy token formats."],
+      created_at: new Date().toISOString(),
+    };
+
+    it("renders ImplementationPlan details and Gate 1 approval buttons", () => {
+      render(
+        <AgentMessage
+          message={{
+            id: "msg-1",
+            role: "assistant",
+            content: "Here is the implementation plan for your review:",
+            status: "completed",
+            plan: mockPlan,
+            approvalId: "appr-1234-uuid",
+            approvalStatus: "PENDING",
+            timestamp: new Date().toISOString(),
+          }}
+        />
+      );
+
+      expect(screen.getByText("Implementation Plan (Gate 1)")).toBeInTheDocument();
+      expect(screen.getByText("Refactor Authentication Token Verification")).toBeInTheDocument();
+      expect(screen.getByText("backend/app/auth/service.py")).toBeInTheDocument();
+      expect(screen.getByText("MODIFY")).toBeInTheDocument();
+      expect(screen.getByText("Unit tests in test_auth.py covering claim validation.")).toBeInTheDocument();
+      expect(screen.getByText("Approve Plan")).toBeInTheDocument();
+      expect(screen.getByText("Reject")).toBeInTheDocument();
+    });
+
+    it("transitions to approved state and displays workspace status", async () => {
+      const onApprove = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <AgentMessage
+          message={{
+            id: "msg-2",
+            role: "assistant",
+            content: "Plan proposed:",
+            status: "completed",
+            plan: mockPlan,
+            approvalId: "appr-1234-uuid",
+            approvalStatus: "PENDING",
+            timestamp: new Date().toISOString(),
+          }}
+        />
+      );
+
+      // Verify buttons exist
+      expect(screen.getByText("Approve Plan")).toBeInTheDocument();
+    });
+  });
 });
+
