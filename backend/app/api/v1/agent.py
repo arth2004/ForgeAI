@@ -12,13 +12,21 @@ from app.schemas.agent import (
     AgentApprovalResponse,
     AgentChatRequest,
     AgentChatResponse,
+    AgentPatchApplyResponse,
+    AgentPatchProposalRequest,
+    AgentPatchResponse,
     AgentPlanRequest,
     AgentPlanResponse,
+    AgentTestExecutionRequest,
+    AgentTestExecutionResponse,
     AgentWorkspaceCreateRequest,
     AgentWorkspaceResponse,
+    PatchDiffResponse,
 )
 from app.services.agent_service import AgentService
+from app.services.patch_service import PatchService
 from app.services.planning_service import PlanningService
+from app.services.test_execution_service import TestExecutionService
 from app.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/agent", tags=["Agent Operations"])
@@ -250,4 +258,174 @@ async def delete_workspace(
     return await workspace_service.delete_workspace(
         user_id=current_user.id, workspace_id=workspace_id
     )
+
+
+# --- Phase 5C Endpoints: Safe Patch Synthesis & Sandboxed Test Execution ---
+
+
+@router.post(
+    "/patches/propose",
+    response_model=AgentPatchResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Propose Structured Patch",
+    description="Validates a structured patch proposal, verifies drift hashes, generates a unified diff, and creates a pending DIFF approval gate.",
+)
+async def propose_patch(
+    request: AgentPatchProposalRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPatchResponse:
+    """Proposes a structured patch for validation and review."""
+    patch_service = PatchService(db=db)
+    return await patch_service.propose_patch(
+        user_id=current_user.id,
+        request=request,
+    )
+
+
+@router.get(
+    "/patches/{patch_id}",
+    response_model=AgentPatchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Patch Proposal Details",
+    description="Retrieves status and metadata of a proposed AgentPatch.",
+)
+async def get_patch(
+    patch_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPatchResponse:
+    """Retrieves an AgentPatch proposal."""
+    patch_service = PatchService(db=db)
+    return await patch_service.get_patch(
+        user_id=current_user.id,
+        patch_id=patch_id,
+    )
+
+
+@router.get(
+    "/patches/{patch_id}/diff",
+    response_model=PatchDiffResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Server-Generated Patch Diff",
+    description="Retrieves the authoritative server-generated unified diff preview.",
+)
+async def get_patch_diff(
+    patch_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PatchDiffResponse:
+    """Retrieves the unified diff representation of a patch."""
+    patch_service = PatchService(db=db)
+    return await patch_service.get_patch_diff(
+        user_id=current_user.id,
+        patch_id=patch_id,
+    )
+
+
+@router.post(
+    "/patches/{patch_id}/approve",
+    response_model=AgentPatchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Approve Patch Diff Gate",
+    description="Explicit human approval for a proposed patch diff, enabling atomic application.",
+)
+async def approve_patch(
+    patch_id: uuid.UUID,
+    request: AgentApprovalActionRequest = AgentApprovalActionRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPatchResponse:
+    """Explicitly approves a proposed patch."""
+    patch_service = PatchService(db=db)
+    return await patch_service.approve_patch(
+        user_id=current_user.id,
+        patch_id=patch_id,
+        reason=request.reason,
+    )
+
+
+@router.post(
+    "/patches/{patch_id}/reject",
+    response_model=AgentPatchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reject Patch Diff Gate",
+    description="Explicit human rejection of a proposed patch.",
+)
+async def reject_patch(
+    patch_id: uuid.UUID,
+    request: AgentApprovalActionRequest = AgentApprovalActionRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPatchResponse:
+    """Explicitly rejects a proposed patch."""
+    patch_service = PatchService(db=db)
+    return await patch_service.reject_patch(
+        user_id=current_user.id,
+        patch_id=patch_id,
+        reason=request.reason,
+    )
+
+
+@router.post(
+    "/patches/{patch_id}/apply",
+    response_model=AgentPatchApplyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Apply Approved Patch Atomically",
+    description="Authoritative gate: applies an APPROVED patch atomically to the workspace filesystem with automatic rollback on error.",
+)
+async def apply_patch(
+    patch_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentPatchApplyResponse:
+    """Applies an approved patch atomically to the workspace."""
+    patch_service = PatchService(db=db)
+    return await patch_service.apply_patch(
+        user_id=current_user.id,
+        patch_id=patch_id,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/tests",
+    response_model=AgentTestExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Execute Sandboxed Test Runner",
+    description="Runs an allowlisted declarative test command (pytest, ruff, npm_test, cargo_test) inside the isolated container sandbox.",
+)
+async def execute_test(
+    workspace_id: uuid.UUID,
+    request: AgentTestExecutionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentTestExecutionResponse:
+    """Executes a test runner inside the workspace sandbox."""
+    test_service = TestExecutionService(db=db)
+    return await test_service.execute_test(
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        request=request,
+    )
+
+
+@router.get(
+    "/tests/{test_id}",
+    response_model=AgentTestExecutionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Test Execution Report",
+    description="Retrieves the report, status, and output logs of a sandboxed test execution.",
+)
+async def get_test_execution(
+    test_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentTestExecutionResponse:
+    """Retrieves a test execution report."""
+    test_service = TestExecutionService(db=db)
+    return await test_service.get_test_execution(
+        user_id=current_user.id,
+        test_id=test_id,
+    )
+
 

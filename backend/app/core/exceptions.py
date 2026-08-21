@@ -55,6 +55,15 @@ class ConflictException(ForgeAIException):
         )
 
 
+class ValidationException(ForgeAIException):
+    def __init__(self, message: str = "Invalid input or validation constraint violated."):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+
 class EmbeddingQuotaExhaustedException(ForgeAIException):
     """Raised when an embedding provider quota (e.g. daily/project limit) is exhausted."""
 

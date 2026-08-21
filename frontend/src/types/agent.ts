@@ -96,6 +96,69 @@ export interface AgentToolActivity {
 export type MessageRole = "user" | "assistant";
 export type MessageStatus = "idle" | "sending" | "streaming" | "completed" | "error";
 
+export interface PatchHunk {
+  id: string;
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  old_content: string;
+  new_content: string;
+}
+
+export interface PatchFile {
+  file_path: string;
+  operation: "CREATE" | "MODIFY" | "DELETE";
+  old_content_hash?: string | null;
+  new_content_hash?: string | null;
+  hunks: PatchHunk[];
+  reason?: string | null;
+}
+
+export interface AgentPatch {
+  patch_id: string;
+  workspace_id: string;
+  session_id: string;
+  status: "PROPOSED" | "VALIDATED" | "AWAITING_APPROVAL" | "APPROVED" | "APPLIED" | "REJECTED" | "CONFLICT" | "FAILED";
+  summary: string;
+  files: PatchFile[];
+  diff_content?: string | null;
+  approval_id?: string | null;
+  created_at: string;
+  applied_at?: string | null;
+}
+
+export interface PatchDiff {
+  patch_id: string;
+  workspace_id: string;
+  unified_diff: string;
+  files_changed: number;
+  lines_added: number;
+  lines_removed: number;
+}
+
+export interface TestCommand {
+  runner: string;
+  arguments: string[];
+  working_directory?: string | null;
+  timeout_seconds?: number;
+}
+
+export interface AgentTestExecution {
+  test_id: string;
+  workspace_id: string;
+  session_id: string;
+  patch_id?: string | null;
+  test_command: TestCommand;
+  status: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "TIMEOUT" | "CANCELLED" | "SANDBOX_UNAVAILABLE";
+  exit_code?: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  duration_ms?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -107,6 +170,8 @@ export interface ChatMessage {
   approvalId?: string;
   approvalStatus?: string;
   workspace?: AgentWorkspace | null;
+  patch?: AgentPatch | null;
+  testExecution?: AgentTestExecution | null;
   error?: string | null;
   timestamp: string;
 }
@@ -122,10 +187,18 @@ export type AgentStreamEventType =
   | "agent.approval.required"
   | "agent.approval.resolved"
   | "agent.workspace.created"
-  | "agent.workspace.failed";
+  | "agent.workspace.failed"
+  | "agent.patch.proposed"
+  | "agent.patch.validated"
+  | "agent.patch.applied"
+  | "agent.patch.failed"
+  | "agent.test.started"
+  | "agent.test.completed"
+  | "agent.test.failed";
 
 export interface AgentStreamEvent {
   event: AgentStreamEventType;
   data: Record<string, any>;
 }
+
 

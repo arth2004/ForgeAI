@@ -1,9 +1,14 @@
 from app.models.agent import (
     AgentApproval,
+    AgentPatch,
     AgentSession,
+    AgentTestExecution,
     AgentWorkspace,
     ApprovalStatus,
     ApprovalType,
+    PatchOperation,
+    PatchStatus,
+    TestExecutionStatus,
     WorkspaceStatus,
 )
 from app.models.auth import Membership, Organization, Role, User
@@ -47,8 +52,14 @@ __all__ = [
     "AgentSession",
     "AgentWorkspace",
     "AgentApproval",
+    "AgentPatch",
+    "AgentTestExecution",
     "WorkspaceStatus",
     "ApprovalType",
     "ApprovalStatus",
+    "PatchStatus",
+    "PatchOperation",
+    "TestExecutionStatus",
 ]
+
 

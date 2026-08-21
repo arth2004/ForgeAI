@@ -10,6 +10,13 @@ from app.agent.tools.limits import (
     ToolUsageGuard,
     truncate_tool_output,
 )
+from app.agent.tools.patch_tools import (
+    ApplyPatchTool,
+    ProposePatchInput,
+    ProposePatchTool,
+    RunTestsInput,
+    RunTestsTool,
+)
 from app.agent.tools.repository_search import (
     RepositorySearchInput,
     RepositorySearchTool,
@@ -29,12 +36,16 @@ from app.agent.tools.validation import (
 
 
 def get_agent_tools() -> list[BaseRepositoryTool]:
-    """Returns the central registry of all Phase 4 repository agent tools."""
+    """Returns the central registry of all Phase 4 & Phase 5 repository agent tools."""
     return [
         RepositorySearchTool(),
         SymbolSearchTool(),
         FileViewerTool(),
+        ProposePatchTool(),
+        RunTestsTool(),
+        ApplyPatchTool(),
     ]
+
 
 
 def get_agent_tool_by_name(tool_name: str) -> BaseRepositoryTool | None:
@@ -54,6 +65,12 @@ __all__ = [
     "MAX_SEARCH_RESULTS",
     "MAX_SYMBOL_RESULTS",
     "MAX_TOOL_CALLS_PER_EXECUTION",
+    "ApplyPatchTool",
+    "ProposePatchInput",
+    "ProposePatchTool",
+
+    "RunTestsInput",
+    "RunTestsTool",
     "RepositoryNotIndexedError",
     "RepositorySearchInput",
     "RepositorySearchTool",
@@ -73,3 +90,4 @@ __all__ = [
     "validate_top_k",
     "validate_uuid",
 ]
+

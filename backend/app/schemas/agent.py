@@ -237,3 +237,126 @@ class AgentWorkspaceResponse(BaseModel):
     expires_at: datetime.datetime
     destroyed_at: datetime.datetime | None = None
 
+
+# --- Phase 5C Schemas: Safe Patch Synthesis & Sandboxed Test Execution ---
+
+
+class PatchHunk(BaseModel):
+    """Structured hunk within a patch file."""
+
+    id: str = Field(..., description="Stable hunk identifier.")
+    old_start: int = Field(..., description="1-based starting line number in original file.")
+    old_lines: int = Field(..., description="Line count in original file affected by hunk.")
+    new_start: int = Field(..., description="1-based starting line number in target file.")
+    new_lines: int = Field(..., description="Line count in target file produced by hunk.")
+    old_content: str = Field(default="", description="Original code block to be replaced.")
+    new_content: str = Field(default="", description="Replacement code block.")
+
+
+class PatchFile(BaseModel):
+    """Structured patch specification for an individual file."""
+
+    file_path: str = Field(..., description="Repository-relative target file path.")
+    operation: str = Field(..., description="Patch operation: CREATE, MODIFY, DELETE.")
+    old_content_hash: str | None = Field(
+        default=None, description="SHA256 hash of original file content for drift detection."
+    )
+    new_content_hash: str | None = Field(
+        default=None, description="SHA256 hash of target file content post-application."
+    )
+    hunks: list[PatchHunk] = Field(
+        default_factory=list, description="Ordered list of non-overlapping patch hunks."
+    )
+    reason: str | None = Field(
+        default=None, description="Detailed rationale for this file modification."
+    )
+
+
+class AgentPatchProposalRequest(BaseModel):
+    """Payload to propose a structured patch for validation and diff review."""
+
+    workspace_id: uuid.UUID = Field(..., description="Ephemeral workspace ID.")
+    session_id: uuid.UUID = Field(..., description="Agent session ID.")
+    summary: str = Field(..., max_length=1024, description="High-level summary of the patch.")
+    files: list[PatchFile] = Field(..., description="List of structured file patches.")
+    associated_plan_id: uuid.UUID | None = Field(
+        default=None, description="ID of approved ImplementationPlan grounding this patch."
+    )
+
+
+class AgentPatchResponse(BaseModel):
+    """Structured details of an AgentPatch proposal."""
+
+    patch_id: uuid.UUID
+    workspace_id: uuid.UUID
+    session_id: uuid.UUID
+    status: str
+    summary: str
+    files: list[PatchFile]
+    diff_content: str | None = None
+    approval_id: uuid.UUID | None = None
+    created_at: datetime.datetime
+    applied_at: datetime.datetime | None = None
+
+
+class PatchDiffResponse(BaseModel):
+    """Server-generated unified diff preview."""
+
+    patch_id: uuid.UUID
+    workspace_id: uuid.UUID
+    unified_diff: str
+    files_changed: int
+    lines_added: int
+    lines_removed: int
+
+
+class AgentPatchApplyResponse(BaseModel):
+    """Result of atomic patch application to workspace."""
+
+    patch_id: uuid.UUID
+    workspace_id: uuid.UUID
+    status: str
+    applied_at: datetime.datetime
+    files_modified: list[str]
+
+
+class TestCommand(BaseModel):
+    """Structured declarative test command specification."""
+
+    runner: str = Field(..., description="Allowlisted runner: pytest, ruff, npm_test, npm_build, cargo_test.")
+    arguments: list[str] = Field(
+        default_factory=list, description="Allowlisted arguments (paths, flags) with no shell operators."
+    )
+    working_directory: str | None = Field(
+        default=None, description="Optional relative subdirectory within workspace."
+    )
+    timeout_seconds: int = Field(
+        default=120, ge=1, le=300, description="Execution timeout in seconds (default 120s)."
+    )
+
+
+class AgentTestExecutionRequest(BaseModel):
+    """Payload to execute an allowlisted test runner inside the isolated workspace sandbox."""
+
+    test_command: TestCommand
+    session_id: uuid.UUID | None = None
+    patch_id: uuid.UUID | None = None
+
+
+class AgentTestExecutionResponse(BaseModel):
+    """Execution report and output from sandboxed test runner."""
+
+    test_id: uuid.UUID
+    workspace_id: uuid.UUID
+    session_id: uuid.UUID
+    patch_id: uuid.UUID | None = None
+    test_command: TestCommand
+    status: str
+    exit_code: int | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    duration_ms: int | None = None
+    started_at: datetime.datetime | None = None
+    completed_at: datetime.datetime | None = None
+
+

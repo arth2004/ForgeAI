@@ -5,7 +5,10 @@ import { ChatMessage } from "@/types";
 import { AgentActivity } from "./AgentActivity";
 import { AgentSources } from "./AgentSources";
 import { AgentPlanView } from "./AgentPlanView";
+import { AgentDiffView } from "./AgentDiffView";
+import { AgentTestPanel } from "./AgentTestPanel";
 import { Sparkles, User, AlertCircle, Loader2 } from "lucide-react";
+
 
 interface AgentMessageProps {
   message: ChatMessage;
@@ -82,10 +85,25 @@ export function AgentMessage({ message }: AgentMessageProps) {
             />
           )}
 
+          {/* Phase 5C Proposed Patch Card & Gate 2 DIFF Approval */}
+          {message.patch && (
+            <AgentDiffView
+              patch={message.patch}
+            />
+          )}
+
+          {/* Phase 5C Sandboxed Test Execution Panel */}
+          {message.testExecution && (
+            <AgentTestPanel
+              testExecution={message.testExecution}
+            />
+          )}
+
           {/* Sources Citations */}
           {message.sources && message.sources.length > 0 && (
             <AgentSources sources={message.sources} />
           )}
+
 
           {/* Error Banner */}
           {message.status === "error" && (
