@@ -4,8 +4,7 @@ import time
 import uuid
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Set up path to import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,7 +47,8 @@ async def run_acceptance_audit():
 
     # 1. Database Connection & Tenant Setup
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
 
     async with async_session() as db:
         # Create test user & org
@@ -340,19 +340,20 @@ async def run_acceptance_audit():
         print("\n--- 7. Testing Adversarial & Security Defenses ---")
         # 1. Autonomous tool execution without approval
         c_tool = CommitChangesTool()
-        res_c = await c_tool.aexecute(db=None, user_id=user_id, workspace_id=ws_id)
-        assert res_c.success is False and "APPROVAL_REQUIRED" in res_c.error
+        res_c = await c_tool.aexecute(db=db, user_id=user_id, workspace_id=ws_id)
+        assert res_c.success is False and res_c.error is not None and "APPROVAL_REQUIRED" in res_c.error
         print("  [PASS] Autonomous commit_changes tool blocked with APPROVAL_REQUIRED")
 
         p_tool = PushBranchTool()
-        res_p = await p_tool.aexecute(db=None, user_id=user_id, workspace_id=ws_id)
-        assert res_p.success is False and "APPROVAL_REQUIRED" in res_p.error
+        res_p = await p_tool.aexecute(db=db, user_id=user_id, workspace_id=ws_id)
+        assert res_p.success is False and res_p.error is not None and "APPROVAL_REQUIRED" in res_p.error
         print("  [PASS] Autonomous push_branch tool blocked with APPROVAL_REQUIRED")
 
         pr_t = CreatePullRequestTool()
-        res_pr = await pr_t.aexecute(db=None, user_id=user_id, workspace_id=ws_id)
-        assert res_pr.success is False and "APPROVAL_REQUIRED" in res_pr.error
+        res_pr = await pr_t.aexecute(db=db, user_id=user_id, workspace_id=ws_id)
+        assert res_pr.success is False and res_pr.error is not None and "APPROVAL_REQUIRED" in res_pr.error
         print("  [PASS] Autonomous create_pull_request tool blocked with APPROVAL_REQUIRED")
+
 
         # 2. Protected branch mutation attempt
         try:
