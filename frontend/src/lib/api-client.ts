@@ -55,10 +55,46 @@ function extractToken(val: unknown): string | null {
 
 class ApiClient {
   private token: string | null = null;
+  private isHandling401 = false;
+  private onAuthExpiredListeners: Set<() => void> = new Set();
 
   constructor() {
     if (typeof window !== "undefined") {
       this.token = this.getToken();
+    }
+  }
+
+  public onAuthExpired(cb: () => void): () => void {
+    this.onAuthExpiredListeners.add(cb);
+    return () => {
+      this.onAuthExpiredListeners.delete(cb);
+    };
+  }
+
+  public handleAuthExpired() {
+    this.setToken(null);
+    this.onAuthExpiredListeners.forEach((cb) => {
+      try {
+        cb();
+      } catch {}
+    });
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("forgeai:auth-expired"));
+
+      // Avoid redirect loops and avoid redirecting if already on auth page
+      if (!this.isHandling401) {
+        this.isHandling401 = true;
+        const pathname = window.location.pathname;
+        if (pathname !== "/login" && pathname !== "/register") {
+          setTimeout(() => {
+            window.location.replace("/login");
+            this.isHandling401 = false;
+          }, 50);
+        } else {
+          this.isHandling401 = false;
+        }
+      }
     }
   }
 
@@ -72,6 +108,9 @@ class ApiClient {
         localStorage.removeItem("forgeai_auth");
         localStorage.removeItem("auth_token");
         localStorage.removeItem("access_token");
+        sessionStorage.removeItem("forgeai_token");
+        sessionStorage.removeItem("forgeai_auth");
+        sessionStorage.removeItem("auth_token");
       }
     }
   }
@@ -136,6 +175,11 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      // 401 Unauthorized: handle auth expiration immediately
+      if (response.status === 401) {
+        this.handleAuthExpired();
+      }
+
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
       try {
         const errorJson = await response.json();
@@ -163,6 +207,7 @@ class ApiClient {
 
     return response.json() as Promise<T>;
   }
+
 
   // Health
   async getHealth(): Promise<HealthStatus> {

@@ -200,6 +200,169 @@ export function useAgentChat({ projectId, repositoryId, branchId }: UseAgentChat
                 );
                 break;
 
+              case "agent.plan.created":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          plan: data.plan || data,
+                          approvalId: data.approval_id || data.approvalId,
+                          approvalStatus: "PENDING",
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.approval.required":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          approvalId: data.approval_id || data.approvalId || msg.approvalId,
+                          approvalStatus: data.status || "PENDING",
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.approval.resolved":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          approvalStatus: data.status || "APPROVED",
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.workspace.created":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          workspace: data.workspace || data,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.patch.proposed":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          patch: data.patch || data,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.patch.applied":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId && msg.patch
+                      ? {
+                          ...msg,
+                          patch: {
+                            ...msg.patch,
+                            status: "APPLIED",
+                            applied_at: new Date().toISOString(),
+                          },
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.test.started":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          testExecution: {
+                            test_id: data.test_id || `test-${Date.now()}`,
+                            workspace_id: data.workspace_id || "",
+                            session_id: sessionId || "",
+                            test_command: data.test_command || {
+                              runner: data.runner || "pytest",
+                              arguments: data.arguments || [],
+                            },
+                            status: "RUNNING",
+                            started_at: new Date().toISOString(),
+                          },
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.test.completed":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          testExecution: {
+                            ...(msg.testExecution || {
+                              test_id: data.test_id || `test-${Date.now()}`,
+                              workspace_id: data.workspace_id || "",
+                              session_id: sessionId || "",
+                              test_command: data.test_command || {
+                                runner: data.runner || "pytest",
+                                arguments: data.arguments || [],
+                              },
+                            }),
+                            status: data.status || "PASSED",
+                            exit_code: data.exit_code,
+                            duration_ms: data.duration_ms,
+                            stdout: data.stdout,
+                            stderr: data.stderr,
+                            completed_at: new Date().toISOString(),
+                          },
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.commit.created":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          commit: data.commit || data,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.pr.created":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          pullRequest: data.pull_request || data,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
               case "agent.error": {
                 const errMsg =
                   formatAgentErrorMessage(data.status_code, data.error) ||

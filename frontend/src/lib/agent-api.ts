@@ -167,6 +167,9 @@ export async function sendAgentMessage(payload: AgentChatRequest): Promise<Agent
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      apiClient.handleAuthExpired();
+    }
     let errorDetail = "";
     try {
       const errJson = await response.json();
@@ -206,6 +209,9 @@ export async function streamAgentMessage(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      apiClient.handleAuthExpired();
+    }
     let errorDetail = "";
     try {
       const errJson = await response.json();
@@ -222,3 +228,4 @@ export async function streamAgentMessage(
 
   await parseSSEStream(response.body, onEvent);
 }
+

@@ -3,6 +3,10 @@
 import React, { useState } from "react";
 import { AgentCommit, AgentPullRequest, AgentWorkspace } from "@/types/agent";
 
+import { apiClient } from "@/lib/api-client";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface AgentGitPanelProps {
   workspace: AgentWorkspace;
   commit?: AgentCommit | null;
@@ -38,11 +42,28 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
   };
 
   const handleCommit = async () => {
-    if (!onCommit) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onCommit(workspace.workspace_id);
+      if (onCommit) {
+        await onCommit(workspace.workspace_id);
+      } else {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/commit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            workspace_id: workspace.workspace_id,
+            message: `feat(agent): applied verified patch for workspace ${workspace.workspace_id.slice(0, 8)}`,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to commit changes: HTTP ${res.status}`);
+        }
+      }
       setCommitStatus("COMMITTED");
     } catch (err: any) {
       setActionError(err.message || "Failed to commit changes.");
@@ -56,11 +77,27 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
   };
 
   const handlePush = async () => {
-    if (!onPush) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onPush(workspace.workspace_id);
+      if (onPush) {
+        await onPush(workspace.workspace_id);
+      } else {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/push`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            workspace_id: workspace.workspace_id,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to push branch: HTTP ${res.status}`);
+        }
+      }
       setPushStatus("PUSHED");
     } catch (err: any) {
       setActionError(err.message || "Failed to push branch.");
@@ -74,11 +111,29 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
   };
 
   const handleCreatePR = async () => {
-    if (!onCreatePR) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onCreatePR(workspace.workspace_id);
+      if (onCreatePR) {
+        await onCreatePR(workspace.workspace_id);
+      } else {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/pr`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            workspace_id: workspace.workspace_id,
+            title: `feat(agent): code updates from session ${workspace.session_id.slice(0, 8)}`,
+            body: "Automated pull request proposed by Forge AI after sandboxed test verification and human approval gates.",
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to create pull request: HTTP ${res.status}`);
+        }
+      }
       setPrStatus("CREATED");
     } catch (err: any) {
       setActionError(err.message || "Failed to create pull request.");
@@ -86,6 +141,7 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
       setIsActionLoading(false);
     }
   };
+
 
   return (
     <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/90 p-4 text-slate-200 shadow-md">

@@ -50,10 +50,12 @@ export function AgentChat({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-semibold text-white">Forge AI Repository Reasoning Agent</h2>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
-                Phase 4 Ready
+              <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400 border border-cyan-500/20">
+                Phase 5 v0.5.0
               </span>
             </div>
+
+
             <div className="flex items-center gap-2 text-[11px] text-slate-400">
               {repositoryName && (
                 <span className="flex items-center gap-1">

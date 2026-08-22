@@ -3,6 +3,10 @@
 import React, { useState } from "react";
 import { AgentPatch } from "@/types/agent";
 
+import { apiClient } from "@/lib/api-client";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface AgentDiffViewProps {
   patch: AgentPatch;
   onApprove?: (patchId: string) => Promise<void>;
@@ -21,11 +25,24 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
   const [localStatus, setLocalStatus] = useState(patch.status);
 
   const handleApprove = async () => {
-    if (!onApprove) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onApprove(patch.patch_id);
+      if (onApprove) {
+        await onApprove(patch.patch_id);
+      } else if (patch.approval_id) {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${patch.approval_id}/approve`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to approve patch: HTTP ${res.status}`);
+        }
+      }
       setLocalStatus("APPROVED");
     } catch (err: any) {
       setActionError(err.message || "Failed to approve patch.");
@@ -35,11 +52,24 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
   };
 
   const handleReject = async () => {
-    if (!onReject) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onReject(patch.patch_id);
+      if (onReject) {
+        await onReject(patch.patch_id);
+      } else if (patch.approval_id) {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${patch.approval_id}/reject`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to reject patch: HTTP ${res.status}`);
+        }
+      }
       setLocalStatus("REJECTED");
     } catch (err: any) {
       setActionError(err.message || "Failed to reject patch.");
@@ -49,11 +79,28 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
   };
 
   const handleApply = async () => {
-    if (!onApply) return;
     setIsActionLoading(true);
     setActionError(null);
     try {
-      await onApply(patch.patch_id);
+      if (onApply) {
+        await onApply(patch.patch_id);
+      } else {
+        const token = apiClient.getToken() || "";
+        const res = await fetch(`${API_BASE_URL}/api/v1/agent/patches/${patch.patch_id}/apply`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            workspace_id: patch.workspace_id,
+            approval_id: patch.approval_id,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to apply patch: HTTP ${res.status}`);
+        }
+      }
       setLocalStatus("APPLIED");
     } catch (err: any) {
       setActionError(err.message || "Failed to apply patch.");
@@ -61,6 +108,7 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
       setIsActionLoading(false);
     }
   };
+
 
   const diffLines = (patch.diff_content || "").split("\n");
   const addedCount = diffLines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;

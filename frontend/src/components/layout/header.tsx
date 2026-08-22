@@ -27,11 +27,28 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [currentToken, setCurrentToken] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    setCurrentToken(apiClient.getToken());
+
+    const handleAuthExpired = () => {
+      setCurrentToken(null);
+      setMenuOpen(false);
+      queryClient.clear();
+    };
+
+    window.addEventListener("forgeai:auth-expired", handleAuthExpired);
+    const unsub = apiClient.onAuthExpired(handleAuthExpired);
+
+    return () => {
+      window.removeEventListener("forgeai:auth-expired", handleAuthExpired);
+      unsub();
+    };
+  }, [queryClient]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -44,8 +61,6 @@ export function Header() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const token = typeof window !== "undefined" ? apiClient.getToken() : null;
-
   const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: () => apiClient.getHealth(),
@@ -53,17 +68,19 @@ export function Header() {
     retry: 1,
   });
 
-  const { data: currentUser } = useQuery({
+  const { data: currentUser, isError: isUserError, isSuccess: isUserSuccess } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiClient.getMe(),
-    enabled: !!token,
+    enabled: !!currentToken,
     retry: false,
   });
 
+  const isAuthenticated = !!currentToken && !!currentUser && !isUserError && isUserSuccess;
   const isHealthy = health?.status === "ok";
 
   const handleLogout = () => {
     apiClient.logout();
+    setCurrentToken(null);
     queryClient.clear();
     setMenuOpen(false);
     router.push("/login");
@@ -110,7 +127,7 @@ export function Header() {
 
         {/* User Profile / Auth State */}
         {mounted && (
-          token ? (
+          isAuthenticated ? (
             <div className="relative pl-2 border-l border-border/40" ref={menuRef}>
               <button
                 type="button"
@@ -128,6 +145,7 @@ export function Header() {
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-0.5" />
               </button>
+
 
               {/* Account Dropdown Menu */}
               {menuOpen && (

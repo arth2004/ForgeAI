@@ -4,6 +4,10 @@ import React, { useState } from "react";
 import { ImplementationPlan, AgentWorkspace } from "@/types/agent";
 import { CheckCircle, XCircle, FileText, AlertTriangle, ShieldCheck, Cpu, Terminal } from "lucide-react";
 
+import { apiClient } from "@/lib/api-client";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface AgentPlanViewProps {
   plan: ImplementationPlan;
   approvalId?: string;
@@ -35,8 +39,8 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
         await onApprove(approvalId);
       } else {
         // Direct API call
-        const token = localStorage.getItem("token") || "";
-        const approveRes = await fetch(`/api/v1/agent/approvals/${approvalId}/approve`, {
+        const token = apiClient.getToken() || "";
+        const approveRes = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${approvalId}/approve`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -51,7 +55,7 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
         setApprovalStatus("APPROVED");
 
         // Provision isolated workspace
-        const wsRes = await fetch(`/api/v1/agent/workspaces`, {
+        const wsRes = await fetch(`${API_BASE_URL}/api/v1/agent/workspaces`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -86,8 +90,8 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
       if (onReject) {
         await onReject(approvalId);
       } else {
-        const token = localStorage.getItem("token") || "";
-        const rejectRes = await fetch(`/api/v1/agent/approvals/${approvalId}/reject`, {
+        const token = apiClient.getToken() || "";
+        const rejectRes = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${approvalId}/reject`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -105,6 +109,7 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
       setLoading(false);
     }
   };
+
 
   return (
     <div className="mt-4 border border-zinc-800 bg-zinc-950/80 rounded-xl p-5 shadow-2xl backdrop-blur-md">
