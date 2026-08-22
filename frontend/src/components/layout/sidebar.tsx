@@ -34,9 +34,9 @@ const navigationItems = [
 ];
 
 const futurePhaseFeatures = [
-  { name: "PR Reviewer", phase: "Phase 5" },
-  { name: "Architecture Visualizer", phase: "Phase 6" },
   { name: "Autonomous Refactor", phase: "Phase 6" },
+  { name: "Multi-Agent Swarm", phase: "Phase 6" },
+  { name: "Continuous Indexing", phase: "Phase 6" },
 ];
 
 export function Sidebar() {
@@ -54,13 +54,14 @@ export function Sidebar() {
             <span className="font-bold text-base tracking-tight bg-gradient-to-r from-foreground via-foreground to-sky-400 bg-clip-text text-transparent">
               Forge AI
             </span>
-            <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              v0.4
+            <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              v0.5.0
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground font-medium">Phase 4 Agent Live</p>
+          <p className="text-[11px] text-muted-foreground font-medium">Phase 5 Agent Live</p>
         </div>
       </div>
+
 
       {/* Main Navigation */}
       <div className="flex-1 py-6 px-3 space-y-6 overflow-y-auto">
