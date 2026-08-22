@@ -183,20 +183,60 @@ class MockChatModelProvider(BaseChatModelProvider):
                 )
             return resp
 
-        custom_response = kwargs.get("response_override")
-        if custom_response is not None:
-            if isinstance(custom_response, str):
-                return AIMessage(content=custom_response, id=str(uuid.uuid4()))
-            return custom_response
-        if isinstance(self.default_response, AIMessage):
+        # Check if the prompt is asking for an ImplementationPlan or feature planning
+        user_text = ""
+        is_planning = False
+        for msg in messages:
+            content_lower = str(msg.content).lower()
+            if "implementationplan" in content_lower or "phase: planning" in content_lower:
+                is_planning = True
+            if isinstance(msg, HumanMessage):
+                user_text = str(msg.content)
+
+        # Check if this is the first turn without tool messages (simulate repository search)
+        has_tool_messages = any(isinstance(m, ToolMessage) for m in messages)
+
+        if not has_tool_messages and ("plan" in user_text.lower() or "add" in user_text.lower() or "fix" in user_text.lower() or is_planning):
+            # Simulate initial tool search
             return AIMessage(
-                content=self.default_response.content,
-                tool_calls=list(self.default_response.tool_calls)
-                if self.default_response.tool_calls
-                else [],
+                content="",
+                tool_calls=[
+                    {
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "name": "search_repository",
+                        "args": {"query": user_text or "rate limiting patch validation"},
+                    }
+                ],
                 id=str(uuid.uuid4()),
             )
-        return AIMessage(content=self.default_response, id=str(uuid.uuid4()))
+
+        if is_planning or any(k in user_text.lower() for k in ["plan", "add", "fix", "feature", "patch", "endpoint"]):
+            summary_title = user_text[:60] if user_text else "Add rate limiting validation to patch proposal endpoint"
+            plan_payload = {
+                "summary": f"Plan: {summary_title}",
+                "problem_statement": user_text or "Enforce safety validations on repository patch proposal endpoints.",
+                "approach": "Investigate affected routers, add rate limiter dependency guards, and verify with pytest suite.",
+                "affected_files": [
+                    {
+                        "file_path": "app/api/v1/agent.py",
+                        "change_type": "MODIFY",
+                        "reason": "Enforce request verification and session binding.",
+                        "symbols": ["propose_patch", "apply_patch"]
+                    }
+                ],
+                "new_files": [],
+                "deleted_files": [],
+                "test_strategy": "pytest tests/integration/test_phase5c_patch_and_test_api.py -v",
+                "risks": ["Potential 429 response if rate limit window is exceeded during rapid tests."],
+                "sources": []
+            }
+            return AIMessage(content=json.dumps(plan_payload, indent=2), id=str(uuid.uuid4()))
+
+        return AIMessage(
+            content=f"Forge AI repository investigation complete for query: '{user_text}'. All codebase references verified.",
+            id=str(uuid.uuid4()),
+        )
+
 
 
 class GeminiChatModelProvider(BaseChatModelProvider):
