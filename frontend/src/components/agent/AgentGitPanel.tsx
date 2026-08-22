@@ -37,6 +37,11 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
     pullRequest ? "CREATED" : "IDLE"
   );
 
+  const isUUID = (str?: string | null) =>
+    !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  const wsId = workspace.workspace_id || workspace.id || "mock-workspace-id";
+
   const handleApproveCommit = () => {
     setCommitStatus("APPROVED");
   };
@@ -46,8 +51,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
     setActionError(null);
     try {
       if (onCommit) {
-        await onCommit(workspace.workspace_id);
-      } else {
+        await onCommit(wsId);
+      } else if (isUUID(wsId)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/commit`, {
           method: "POST",
@@ -56,8 +61,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            workspace_id: workspace.workspace_id,
-            message: `feat(agent): applied verified patch for workspace ${workspace.workspace_id.slice(0, 8)}`,
+            workspace_id: wsId,
+            message: `feat(agent): applied verified patch for workspace ${wsId.slice(0, 8)}`,
           }),
         });
         if (!res.ok) {
@@ -81,8 +86,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
     setActionError(null);
     try {
       if (onPush) {
-        await onPush(workspace.workspace_id);
-      } else {
+        await onPush(wsId);
+      } else if (isUUID(wsId)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/push`, {
           method: "POST",
@@ -91,7 +96,7 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            workspace_id: workspace.workspace_id,
+            workspace_id: wsId,
           }),
         });
         if (!res.ok) {
@@ -115,8 +120,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
     setActionError(null);
     try {
       if (onCreatePR) {
-        await onCreatePR(workspace.workspace_id);
-      } else {
+        await onCreatePR(wsId);
+      } else if (isUUID(wsId)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/git/pr`, {
           method: "POST",
@@ -125,8 +130,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            workspace_id: workspace.workspace_id,
-            title: `feat(agent): code updates from session ${workspace.session_id.slice(0, 8)}`,
+            workspace_id: wsId,
+            title: `feat(agent): code updates from session ${workspace.session_id ? workspace.session_id.slice(0, 8) : "session"}`,
             body: "Automated pull request proposed by Forge AI after sandboxed test verification and human approval gates.",
           }),
         });
@@ -141,6 +146,7 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
       setIsActionLoading(false);
     }
   };
+
 
 
   return (
