@@ -239,12 +239,13 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
               ✕ Patch proposal rejected.
             </span>
           )}
-          {localStatus === "AWAITING_APPROVAL" && (
-            <span>Review the unified diff before granting approval.</span>
+          {(localStatus === "AWAITING_APPROVAL" || localStatus === "PROPOSED") && (
+            <span>Review the unified diff below before granting Gate 2 approval.</span>
           )}
         </div>
 
         <div className="flex items-center space-x-2">
+
           {(localStatus === "AWAITING_APPROVAL" || localStatus === "PROPOSED") && (
             <>
               <button
