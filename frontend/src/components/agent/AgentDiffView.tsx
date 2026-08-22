@@ -149,34 +149,37 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
       <div className="mt-3 text-xs">
         <p className="text-slate-300 font-medium">{patch.summary}</p>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-slate-400">
-          <span>Files changed: <strong className="text-slate-200">{patch.files.length}</strong></span>
+          <span>Files changed: <strong className="text-slate-200">{(patch.files || []).length}</strong></span>
           <span className="text-emerald-400 font-medium">+{addedCount} lines</span>
           <span className="text-rose-400 font-medium">-{removedCount} lines</span>
         </div>
       </div>
 
       {/* Files List */}
-      <div className="mt-3 space-y-1">
-        {patch.files.map((file, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between rounded bg-slate-950/60 px-2 py-1 text-xs border border-slate-800"
-          >
-            <span className="font-mono text-slate-300 truncate">{file.file_path}</span>
-            <span
-              className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase ${
-                file.operation === "CREATE"
-                  ? "bg-emerald-900/60 text-emerald-300"
-                  : file.operation === "DELETE"
-                  ? "bg-rose-900/60 text-rose-300"
-                  : "bg-blue-900/60 text-blue-300"
-              }`}
+      {(patch.files || []).length > 0 && (
+        <div className="mt-3 space-y-1">
+          {(patch.files || []).map((file, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between rounded bg-slate-950/60 px-2 py-1 text-xs border border-slate-800"
             >
-              {file.operation}
-            </span>
-          </div>
-        ))}
-      </div>
+              <span className="font-mono text-slate-300 truncate">{file.file_path}</span>
+              <span
+                className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase ${
+                  file.operation === "CREATE"
+                    ? "bg-emerald-900/60 text-emerald-300"
+                    : file.operation === "DELETE"
+                    ? "bg-rose-900/60 text-rose-300"
+                    : "bg-blue-900/60 text-blue-300"
+                }`}
+              >
+                {file.operation}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
 
       {/* Unified Diff Box */}
       {patch.diff_content && (
