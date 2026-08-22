@@ -44,10 +44,11 @@ export const AgentTestPanel: React.FC<AgentTestPanelProps> = ({ testExecution })
       {/* Command & Metadata */}
       <div className="mt-3 space-y-1 text-xs">
         <div className="flex items-center space-x-2 font-mono text-slate-300 bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-800">
-          <span className="text-indigo-400 font-bold">$ {test_command.runner}</span>
-          <span>{test_command.arguments.join(" ")}</span>
+          <span className="text-indigo-400 font-bold">$ {test_command?.runner || (testExecution as any).runner || "pytest"}</span>
+          <span>{test_command?.arguments?.join(" ") || (Array.isArray((testExecution as any).command) ? (testExecution as any).command.slice(1).join(" ") : "-v")}</span>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-slate-400 pt-1">
+
           {exit_code !== undefined && exit_code !== null && (
             <span>
               Exit code: <strong className={exit_code === 0 ? "text-emerald-400" : "text-rose-400"}>{exit_code}</strong>

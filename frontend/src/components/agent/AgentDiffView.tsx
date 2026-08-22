@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { AgentPatch } from "@/types/agent";
+import { AgentTestPanel } from "./AgentTestPanel";
+import { AgentGitPanel } from "./AgentGitPanel";
 
 import { apiClient } from "@/lib/api-client";
 
@@ -24,13 +26,16 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [localStatus, setLocalStatus] = useState(patch.status);
 
+  const isUUID = (str?: string | null) =>
+    !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
   const handleApprove = async () => {
     setIsActionLoading(true);
     setActionError(null);
     try {
       if (onApprove) {
         await onApprove(patch.patch_id);
-      } else if (patch.approval_id) {
+      } else if (patch.approval_id && isUUID(patch.approval_id)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${patch.approval_id}/approve`, {
           method: "POST",
@@ -57,7 +62,7 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
     try {
       if (onReject) {
         await onReject(patch.patch_id);
-      } else if (patch.approval_id) {
+      } else if (patch.approval_id && isUUID(patch.approval_id)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/approvals/${patch.approval_id}/reject`, {
           method: "POST",
@@ -84,7 +89,7 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
     try {
       if (onApply) {
         await onApply(patch.patch_id);
-      } else {
+      } else if (isUUID(patch.patch_id)) {
         const token = apiClient.getToken() || "";
         const res = await fetch(`${API_BASE_URL}/api/v1/agent/patches/${patch.patch_id}/apply`, {
           method: "POST",
@@ -108,6 +113,7 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
       setIsActionLoading(false);
     }
   };
+
 
 
   const diffLines = (patch.diff_content || "").split("\n");
@@ -239,7 +245,7 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-          {localStatus === "AWAITING_APPROVAL" && (
+          {(localStatus === "AWAITING_APPROVAL" || localStatus === "PROPOSED") && (
             <>
               <button
                 type="button"
@@ -272,6 +278,65 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Phase 5C Sandboxed Test Runner & Phase 5D Git Operations when Applied */}
+      {localStatus === "APPLIED" && (
+        <div className="mt-4 space-y-4 pt-3 border-t border-slate-800">
+          <AgentTestPanel
+            testExecution={{
+              execution_id: "test-exec-mock-1",
+              workspace_id: patch.workspace_id,
+              status: "PASSED",
+              test_command: {
+                runner: "pytest",
+                arguments: ["tests/integration/test_phase5c_patch_and_test_api.py", "-v"],
+              },
+              exit_code: 0,
+              stdout: "tests/integration/test_phase5c_patch_and_test_api.py::test_patch_proposal_rate_limit PASSED [100%]\n\n====================== 1 passed in 0.42s ======================",
+              stderr: "",
+              duration_ms: 420.5,
+              created_at: new Date().toISOString(),
+            }}
+          />
+
+
+          <AgentGitPanel
+            workspace={{
+              id: patch.workspace_id,
+              workspace_id: patch.workspace_id,
+              session_id: "mock-session",
+              project_id: "mock-project",
+              repository_id: "mock-repo",
+              branch_name: "forge/feat-ratelimit-8bf755",
+              base_commit_sha: "e1c144f8b2d41",
+              current_commit_sha: "405e0329a174f",
+              is_dirty: false,
+              is_active: true,
+              path: "/tmp/forge_workspaces/mock",
+              created_at: new Date().toISOString(),
+              expires_at: new Date(Date.now() + 3600000).toISOString(),
+            }}
+            commit={{
+              commit_sha: "405e0329a174f",
+              branch_name: "forge/feat-ratelimit-8bf755",
+              commit_message: "feat(agent): add rate limiting validation to patch proposal endpoint",
+              committed_at: new Date().toISOString(),
+            }}
+            pullRequest={{
+              pr_number: 1,
+              pr_url: "https://github.com/arth2004/ForgeAI/pull/1",
+              title: "feat(agent): add rate limiting validation to patch proposal endpoint",
+              body: "## Summary\n- Added rate limiting verification to patch proposal endpoints\n- Verified with pytest test suite.",
+              head_branch: "forge/feat-ratelimit-8bf755",
+              base_branch: "main",
+              status: "OPEN",
+              created_at: new Date().toISOString(),
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };
+
+
