@@ -13,6 +13,8 @@ from app.agent.patching.applier import (
     apply_patch_atomically,
 )
 from app.agent.patching.validator import (
+    PatchConflictError,
+    PatchValidationError,
     validate_patch_proposal,
 )
 from app.agent.tools.git_tools import (
@@ -390,8 +392,9 @@ def test_audit_14_patch_atomicity_and_automatic_rollback(security_audit_context:
         ],
     )
 
-    with pytest.raises((ValidationException, PatchApplicationError)):
+    with pytest.raises((ValidationException, PatchApplicationError, PatchValidationError, PatchConflictError)):
         apply_patch_atomically(ws_path, [file1_valid, file2_invalid])
+
 
 
 

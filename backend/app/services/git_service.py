@@ -341,11 +341,14 @@ class GitService:
             created_at=now,
         )
         self.db.add(commit_record)
+        await self.db.flush()
+
         workspace.current_commit_sha = commit_sha
         approval.commit_id = commit_record.id
 
         await self.db.commit()
         await self.db.refresh(commit_record)
+
         await self.db.refresh(workspace)
 
         logger.info(f"[git.committed] workspace_id={workspace.id} sha={commit_sha} branch={branch_name}")

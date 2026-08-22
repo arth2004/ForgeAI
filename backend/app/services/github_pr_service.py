@@ -200,10 +200,13 @@ class GitHubPRService:
             created_at=now,
         )
         self.db.add(pr_record)
+        await self.db.flush()
+
         approval.pull_request_id = pr_record.id
 
         await self.db.commit()
         await self.db.refresh(pr_record)
+
 
         logger.info(f"[github.pr.created] pr_id={pr_record.id} number={github_pr_number} url={github_pr_url}")
 

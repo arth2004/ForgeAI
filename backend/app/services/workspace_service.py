@@ -169,12 +169,14 @@ class WorkspaceService:
             expires_at=expires_at,
         )
         self.db.add(workspace)
+        await self.db.flush()
 
         # Link approval to workspace
         approval.workspace_id = workspace_id
 
         await self.db.commit()
         await self.db.refresh(workspace)
+
 
         logger.info(
             f"[workspace.created] workspace_id={workspace.id} session_id={session_id} "

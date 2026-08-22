@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools.base import BaseRepositoryTool, ToolExecutionResult
-from app.services.git_service import GitService
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,8 @@ class CreateBranchTool(BaseRepositoryTool):
         self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
     ) -> ToolExecutionResult:
         try:
+            from app.services.git_service import GitService
+
             req = CreateBranchInput.model_validate(kwargs)
             service = GitService(db=db)
             res = await service.create_branch(
@@ -50,6 +51,7 @@ class CreateBranchTool(BaseRepositoryTool):
                 workspace_id=req.workspace_id,
                 branch_name=req.branch_name,
             )
+
             return ToolExecutionResult(
                 tool_name=self.name,
                 success=True,
@@ -96,12 +98,15 @@ class GitStatusTool(BaseRepositoryTool):
         self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
     ) -> ToolExecutionResult:
         try:
+            from app.services.git_service import GitService
+
             req = GitStatusInput.model_validate(kwargs)
             service = GitService(db=db)
             res = await service.get_git_status(
                 user_id=user_id,
                 workspace_id=req.workspace_id,
             )
+
             return ToolExecutionResult(
                 tool_name=self.name,
                 success=True,

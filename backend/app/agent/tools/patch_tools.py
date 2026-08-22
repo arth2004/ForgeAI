@@ -12,8 +12,6 @@ from app.schemas.agent import (
     PatchFile,
     TestCommand,
 )
-from app.services.patch_service import PatchService
-from app.services.test_execution_service import TestExecutionService
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +50,15 @@ class ProposePatchTool(BaseRepositoryTool):
         self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
     ) -> ToolExecutionResult:
         try:
+            from app.services.patch_service import PatchService
+
             req = ProposePatchInput.model_validate(kwargs)
             service = PatchService(db=db)
             res = await service.propose_patch(
                 user_id=user_id,
                 request=AgentPatchProposalRequest(
                     workspace_id=req.workspace_id,
+
                     session_id=req.session_id,
                     summary=req.summary,
                     files=req.files,
@@ -121,6 +122,8 @@ class RunTestsTool(BaseRepositoryTool):
         self, db: AsyncSession, user_id: uuid.UUID, **kwargs: Any
     ) -> ToolExecutionResult:
         try:
+            from app.services.test_execution_service import TestExecutionService
+
             req = RunTestsInput.model_validate(kwargs)
             service = TestExecutionService(db=db)
             cmd = TestCommand(
@@ -129,6 +132,7 @@ class RunTestsTool(BaseRepositoryTool):
                 working_directory=req.working_directory,
                 timeout_seconds=req.timeout_seconds,
             )
+
             res = await service.execute_test(
                 user_id=user_id,
                 workspace_id=req.workspace_id,
