@@ -24,7 +24,8 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
 }) => {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [localStatus, setLocalStatus] = useState(patch.status);
+  const [localStatus, setLocalStatus] = useState(patch.status || "AWAITING_APPROVAL");
+
 
   const isUUID = (str?: string | null) =>
     !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -143,11 +144,12 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
                 ? "bg-rose-950 text-rose-400 border border-rose-700/50"
                 : localStatus === "CONFLICT"
                 ? "bg-amber-950 text-amber-400 border border-amber-700/50"
-                : "bg-amber-950/80 text-amber-300 border border-amber-700/50 animate-pulse"
+                : "bg-amber-950/80 text-amber-300 border border-amber-700/50"
             }`}
           >
-            {localStatus}
+            {localStatus || "AWAITING_APPROVAL"}
           </span>
+
         </div>
       </div>
 
