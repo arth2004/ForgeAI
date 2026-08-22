@@ -1,6 +1,6 @@
 """Create agent_workspaces and agent_approvals tables for Phase 5B
 
-Revision ID: 0006_agent_workspaces_and_approvals
+Revision ID: 0006_agent_workspaces
 Revises: 0005_agent_sessions
 Create Date: 2026-08-22 03:30:00.000000
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "0006_agent_workspaces_and_approvals"
+revision: str = "0006_agent_workspaces"
 down_revision: str | None = "0005_agent_sessions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
