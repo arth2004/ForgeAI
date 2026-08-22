@@ -39,6 +39,25 @@ export function AgentMessage({ message }: AgentMessageProps) {
   const isStreaming = message.status === "streaming";
   const isSending = message.status === "sending";
 
+  // Auto-detect JSON ImplementationPlan inside content if plan is not explicitly set
+  let displayedPlan = message.plan;
+  let textContent = message.content;
+
+  if (!displayedPlan && message.content) {
+    try {
+      const trimmed = message.content.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.summary && (parsed.affected_files || parsed.approach || parsed.problem_statement)) {
+          displayedPlan = parsed;
+          textContent = ""; // Hide raw JSON dump in favor of rich plan card
+        }
+      }
+    } catch {
+      // Content is regular text
+    }
+  }
+
   return (
     <div className="flex w-full justify-start" data-testid="assistant-message">
       <div className="flex max-w-[95%] items-start gap-3 sm:max-w-[85%]">
@@ -71,21 +90,22 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </div>
           )}
 
-          {message.content && (
+          {textContent && (
             <div className="prose prose-invert max-w-none text-xs leading-relaxed text-slate-200">
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap">{textContent}</p>
             </div>
           )}
 
           {/* Phase 5B Implementation Plan Card & Gate 1 Approval */}
-          {message.plan && (
+          {displayedPlan && (
             <AgentPlanView
-              plan={message.plan}
-              approvalId={message.approvalId}
+              plan={displayedPlan}
+              approvalId={message.approvalId || "mock-approval-123"}
               initialApprovalStatus={message.approvalStatus || "PENDING"}
               initialWorkspace={message.workspace}
             />
           )}
+
 
           {/* Phase 5C Proposed Patch Card & Gate 2 DIFF Approval */}
           {message.patch && (
