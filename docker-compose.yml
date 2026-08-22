@@ -54,7 +54,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/forgeai
       REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: http://localhost:3000
+      AGENT_DEFAULT_PROVIDER: ${AGENT_DEFAULT_PROVIDER:-mock}
     ports:
+
       - "8000:8000"
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
