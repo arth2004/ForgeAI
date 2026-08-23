@@ -475,3 +475,118 @@ Prompting LLMs to output entire file contents for minor changes is slow, expensi
 - **Positive**: Minimal token usage; atomic rollback capability; precise line-level attribution; prevents file drift bugs.
 - **Negative**: Requires server-side patch parsing and fuzz-matching logic when minor whitespace differences occur.
 
+---
+
+## ADR-022: Centralized Multi-Agent Orchestration with Deterministic State Transitions
+
+### Status
+Accepted
+
+### Context
+Phase 5 used a single monolithic agent for retrieval, planning, patching, testing, and Git operations. Complex multi-step software engineering tasks require specialized cognitive roles (planning, coding, testing, review) without suffering from prompt confusion, sycophancy, or context exhaustion. Uncontrolled peer-to-peer swarms introduce non-deterministic execution and safety risks.
+
+### Decision
+1. Implement a **Centralized Multi-Agent Orchestration Architecture** governed by an authoritative LangGraph StateGraph supervisor (`EngineeringOrchestrator`).
+2. Decompose engineering workflows into four specialized subagents:
+   - **Planner Agent**: Read-only codebase investigation, symbol lookup, and `ImplementationPlan` synthesis.
+   - **Coder Agent**: Context-grounded diff and patch synthesis within ephemeral workspaces.
+   - **Tester Agent**: Automated test execution and failure analysis inside non-networked `gVisor` containers.
+   - **Reviewer Agent**: Adversarial static security and regression analysis without mutation capabilities.
+3. All inter-agent handoffs must route deterministically through the supervisor node.
+
+### Consequences
+- **Positive**: High determinism, inspectable state transitions, eliminates swarm deadlocks, isolates context windows per role.
+- **Negative**: Adds graph routing nodes and requires typed message handoffs.
+
+---
+
+## ADR-023: Specialized Role Boundaries and Tool Access Segmentation
+
+### Status
+Accepted
+
+### Context
+Granting broad tool execution privileges (e.g. running tests, applying patches, proposing diffs) to all agents increases the attack surface for prompt injection and accidental repository mutation.
+
+### Decision
+1. Segment tool access strictly by agent role:
+   - `Planner`: Read-only retrieval and symbol tools (`search_repository`, `search_symbol`, `get_file`).
+   - `Coder`: Read-only tools + `propose_patch`.
+   - `Tester`: `run_tests` (restricted to allowlisted commands in sandbox).
+   - `Reviewer`: Read-only retrieval and AST inspection tools.
+2. State-mutating operations (`apply_patch`, `git_commit`, `git_push`, `create_pull_request`) remain strictly inaccessible to autonomous agent execution and require explicit human approval.
+
+### Consequences
+- **Positive**: Prevents unauthorized lateral movement or bypass of safety gates even in the event of prompt injection.
+- **Negative**: Agents must coordinate through structured handoffs rather than executing side-effects directly.
+
+---
+
+## ADR-024: Hybrid Shared-State Model (LangGraph Typed State + PostgreSQL Persistence)
+
+### Status
+Accepted
+
+### Context
+Multi-agent systems require sharing contextual artifacts (plans, patches, test outputs, review findings) between subagents while maintaining queryable auditability for human reviewers and persistent task history.
+
+### Decision
+1. Use a **Hybrid Shared-State Architecture**:
+   - **Transient Loop State**: In-memory LangGraph `MultiAgentState` TypedDict for rapid subagent handoffs.
+   - **Persistent Relational State**: PostgreSQL tables (`AgentTask`, `AgentApproval`, `AgentPatch`, `AgentTestExecution`, `AgentReview`, `AgentPullRequest`) for audit trails and UI streaming.
+2. Sensitive credentials (API keys, GitHub tokens) are strictly excluded from state serialization.
+
+### Consequences
+- **Positive**: Immediate consistency during execution; permanent auditability; zero external message broker dependencies.
+- **Negative**: Requires synchronization checkpoints between LangGraph node completion and database persistence.
+
+---
+
+## ADR-025: Preservation of 5-Gate Human-in-the-Loop Authority in Multi-Agent Execution
+
+### Status
+Accepted
+
+### Context
+Introducing multi-agent autonomy could tempt automated self-approval loops (e.g. Reviewer Agent approving Coder Agent's patch automatically). Enterprise safety invariants require that software mutations remain human-authorized.
+
+### Decision
+1. Preserve all **5 Human Approval Gates** established in Phase 5:
+   - **Gate 1**: Plan Approval
+   - **Gate 2**: Patch Diff Approval
+   - **Gate 3**: Commit Approval
+   - **Gate 4**: Remote Push Approval
+   - **Gate 5**: Pull Request Creation Approval
+2. The Reviewer Agent provides structured advisory feedback (`APPROVED` or `CHANGES_REQUESTED` with line-level findings) to assist the human reviewer, but possesses **zero authority** to execute persistent mutations.
+
+### Consequences
+- **Positive**: Guarantees absolute human oversight; prevents accidental repository pollution or autonomous privilege escalation.
+- **Negative**: Human reviewer interaction is mandatory before changes are pushed to remote repositories.
+
+---
+
+## ADR-026: Hierarchical Iteration, Budget, and Timeout Guardrails
+
+### Status
+Accepted
+
+### Context
+Autonomous multi-agent feedback loops (e.g. Tester failure $\rightarrow$ Coder repair $\rightarrow$ Reviewer failure $\rightarrow$ Coder repair) can produce infinite cycles and runaway LLM token costs if unbounded.
+
+### Decision
+1. Enforce strict hierarchical execution guardrails:
+   - `MAX_TOTAL_WORKFLOW_ITERATIONS`: 15
+   - `MAX_PLANNER_INVESTIGATION_STEPS`: 5
+   - `MAX_CODER_RETRY_CYCLES`: 3
+   - `MAX_TEST_REPAIR_LOOPS`: 3
+   - `MAX_REVIEW_ITERATIONS`: 2
+   - `MAX_TOTAL_TOOL_INVOCATIONS`: 30
+   - `MAX_WORKFLOW_EXECUTION_SECONDS`: 600 (10 minutes)
+   - `MAX_TOKEN_BUDGET_PER_TASK`: 150,000 tokens
+2. If any threshold is reached, the Orchestrator halts execution gracefully, releases ephemeral locks, and transitions the task to `WAITING_HUMAN_INTERVENTION`.
+
+### Consequences
+- **Positive**: Prevents infinite loops, bounds maximum per-task cost, and protects LLM provider rate limits.
+- **Negative**: Complex multi-file tasks requiring $> 15$ iterations must be decomposed into smaller user objectives.
+
+

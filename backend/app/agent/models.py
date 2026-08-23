@@ -183,6 +183,21 @@ class MockChatModelProvider(BaseChatModelProvider):
                 )
             return resp
 
+        custom_response = kwargs.get("response_override")
+        if custom_response is not None:
+            if isinstance(custom_response, str):
+                return AIMessage(content=custom_response, id=str(uuid.uuid4()))
+            return custom_response
+
+        if self.default_response != "Mock agent reasoning completed.":
+            if isinstance(self.default_response, AIMessage):
+                return AIMessage(
+                    content=self.default_response.content,
+                    tool_calls=list(self.default_response.tool_calls) if self.default_response.tool_calls else [],
+                    id=str(uuid.uuid4()),
+                )
+            return AIMessage(content=str(self.default_response), id=str(uuid.uuid4()))
+
         # Check if the prompt is asking for an ImplementationPlan or feature planning
         user_text = ""
         is_planning = False
@@ -195,6 +210,7 @@ class MockChatModelProvider(BaseChatModelProvider):
 
         # Check if this is the first turn without tool messages (simulate repository search)
         has_tool_messages = any(isinstance(m, ToolMessage) for m in messages)
+
 
         if not has_tool_messages and ("plan" in user_text.lower() or "add" in user_text.lower() or "fix" in user_text.lower() or is_planning):
             # Simulate initial tool search

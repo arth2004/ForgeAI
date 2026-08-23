@@ -287,8 +287,9 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
         <div className="mt-4 space-y-4 pt-3 border-t border-slate-800">
           <AgentTestPanel
             testExecution={{
-              execution_id: "test-exec-mock-1",
+              test_id: "test-exec-mock-1",
               workspace_id: patch.workspace_id,
+              session_id: patch.session_id,
               status: "PASSED",
               test_command: {
                 runner: "pytest",
@@ -298,46 +299,55 @@ export const AgentDiffView: React.FC<AgentDiffViewProps> = ({
               stdout: "tests/integration/test_phase5c_patch_and_test_api.py::test_patch_proposal_rate_limit PASSED [100%]\n\n====================== 1 passed in 0.42s ======================",
               stderr: "",
               duration_ms: 420.5,
-              created_at: new Date().toISOString(),
             }}
           />
 
-
           <AgentGitPanel
             workspace={{
-              id: patch.workspace_id,
               workspace_id: patch.workspace_id,
-              session_id: "mock-session",
+              session_id: patch.session_id,
+              organization_id: "mock-org",
               project_id: "mock-project",
               repository_id: "mock-repo",
               branch_name: "forge/feat-ratelimit-8bf755",
               base_commit_sha: "e1c144f8b2d41",
               current_commit_sha: "405e0329a174f",
-              is_dirty: false,
-              is_active: true,
+              status: "PREPARED",
+              user_id: "mock-user",
               path: "/tmp/forge_workspaces/mock",
               created_at: new Date().toISOString(),
               expires_at: new Date(Date.now() + 3600000).toISOString(),
             }}
             commit={{
+              commit_id: "commit-mock-1",
+              workspace_id: patch.workspace_id,
+              session_id: patch.session_id,
               commit_sha: "405e0329a174f",
               branch_name: "forge/feat-ratelimit-8bf755",
-              commit_message: "feat(agent): add rate limiting validation to patch proposal endpoint",
-              committed_at: new Date().toISOString(),
+              message: "feat(agent): add rate limiting validation to patch proposal endpoint",
+              created_at: new Date().toISOString(),
             }}
             pullRequest={{
-              pr_number: 1,
-              pr_url: "https://github.com/arth2004/ForgeAI/pull/1",
+              pr_id: "pr-mock-1",
+              workspace_id: patch.workspace_id,
+              session_id: patch.session_id,
+              repository_id: "mock-repo",
+              branch_name: "forge/feat-ratelimit-8bf755",
+              base_branch: "main",
+              commit_sha: "405e0329a174f",
+              github_pr_number: 1,
+              github_pr_url: "https://github.com/arth2004/ForgeAI/pull/1",
               title: "feat(agent): add rate limiting validation to patch proposal endpoint",
               body: "## Summary\n- Added rate limiting verification to patch proposal endpoints\n- Verified with pytest test suite.",
-              head_branch: "forge/feat-ratelimit-8bf755",
-              base_branch: "main",
-              status: "OPEN",
+              status: "CREATED",
               created_at: new Date().toISOString(),
             }}
           />
         </div>
       )}
+
+
+
     </div>
   );
 };

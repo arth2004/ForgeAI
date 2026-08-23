@@ -79,15 +79,20 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
         // Graceful mock/interactive session approval
         setApprovalStatus("APPROVED");
         setWorkspace({
-          id: "ws-mock-workspace-1",
+          workspace_id: "ws-mock-workspace-1",
           session_id: "mock-session",
-          workspace_path: "/tmp/forge_workspaces/mock_ws_8bf755",
+          organization_id: "mock-org",
+          project_id: "mock-project",
+          repository_id: "mock-repo",
+          path: "/tmp/forge_workspaces/mock_ws_8bf755",
           base_commit_sha: "e1c144f8b2d41",
-          is_dirty: false,
-          is_active: true,
+          status: "PREPARED",
+          user_id: "mock-user",
           created_at: new Date().toISOString(),
-        } as AgentWorkspace);
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+        });
       }
+
       setApprovalStatus("APPROVED");
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to approve plan and provision workspace.");
@@ -254,7 +259,7 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
               <div className="space-y-1 text-zinc-300">
                 <p className="text-emerald-400 font-medium">Isolated Workspace Ready</p>
                 <p className="font-mono text-[11px] text-zinc-400">
-                  Workspace ID: {workspace.workspace_id || workspace.id}
+                  Workspace ID: {workspace.workspace_id}
                 </p>
                 <p className="font-mono text-[11px] text-zinc-400">
                   Base Commit SHA: {workspace.base_commit_sha}
@@ -273,17 +278,14 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
             <AgentDiffView
               patch={{
                 patch_id: "patch-mock-ratelimit-1",
-                workspace_id: workspace?.workspace_id || workspace?.id || "ws-mock-workspace-1",
-                plan_id: "plan-mock-1",
+                workspace_id: workspace?.workspace_id || "ws-mock-workspace-1",
+                session_id: "mock-session",
                 approval_id: "appr-diff-mock-1",
                 status: "AWAITING_APPROVAL",
                 summary: "Add rate limit verification to patch proposal endpoints",
-
-
-
+                created_at: new Date().toISOString(),
                 diff_content: `--- a/app/api/v1/agent.py\n+++ b/app/api/v1/agent.py\n@@ -142,6 +142,9 @@ async def propose_patch(\n     session_id: uuid.UUID,\n     request: AgentPatchProposalRequest,\n     current_user: User = Depends(get_current_user),\n+    rate_limiter: RateLimiter = Depends(get_rate_limiter),\n ):\n+    await rate_limiter.check_rate_limit(current_user.id, "patch_proposal")\n     return await patch_service.propose_patch(db, session_id, current_user.id, request)\n`,
                 files: [
-
                   {
                     file_path: "app/api/v1/agent.py",
                     operation: "MODIFY",
@@ -291,11 +293,9 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
                     reason: "Enforce request verification and rate limit check.",
                   },
                 ],
-                session_id: "mock-session",
-                created_at: new Date().toISOString(),
               }}
-
             />
+
           </div>
         </div>
       )}

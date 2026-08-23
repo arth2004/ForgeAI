@@ -40,7 +40,8 @@ export const AgentGitPanel: React.FC<AgentGitPanelProps> = ({
   const isUUID = (str?: string | null) =>
     !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-  const wsId = workspace.workspace_id || workspace.id || "mock-workspace-id";
+  const wsId = workspace.workspace_id || (workspace as any).id || "mock-workspace-id";
+
 
   const handleApproveCommit = () => {
     setCommitStatus("APPROVED");
