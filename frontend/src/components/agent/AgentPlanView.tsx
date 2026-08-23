@@ -10,6 +10,40 @@ import { apiClient } from "@/lib/api-client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const MOCK_DIFF_CONTENT = [
+  "--- a/app/api/v1/agent.py",
+  "+++ b/app/api/v1/agent.py",
+  "@@ -142,6 +142,9 @@ async def propose_patch(",
+  "     session_id: uuid.UUID,",
+  "     request: AgentPatchProposalRequest,",
+  "     current_user: User = Depends(get_current_user),",
+  "+    rate_limiter: RateLimiter = Depends(get_rate_limiter),",
+  " ):",
+  "+    await rate_limiter.check_rate_limit(current_user.id, \"patch_proposal\")",
+  "     return await patch_service.propose_patch(db, session_id, current_user.id, request)",
+  "",
+].join("\n");
+
+const getMockPatch = (workspaceId?: string): AgentPatch => ({
+  patch_id: "patch-mock-ratelimit-1",
+  workspace_id: workspaceId || "ws-mock-workspace-1",
+  session_id: "mock-session",
+  approval_id: "appr-diff-mock-1",
+  status: "AWAITING_APPROVAL",
+  summary: "Add rate limit verification to patch proposal endpoints",
+  created_at: new Date().toISOString(),
+  diff_content: MOCK_DIFF_CONTENT,
+  files: [
+    {
+      file_path: "app/api/v1/agent.py",
+      operation: "MODIFY",
+      hunks: [],
+      reason: "Enforce request verification and rate limit check.",
+    },
+  ],
+});
+
+
 interface AgentPlanViewProps {
   plan: ImplementationPlan;
   approvalId?: string;
@@ -275,30 +309,11 @@ export const AgentPlanView: React.FC<AgentPlanViewProps> = ({
 
           {/* Phase 5C Proposed Unified Diff & Gate 2 Approval */}
           <div className="pt-2">
-            <AgentDiffView
-              patch={{
-                patch_id: "patch-mock-ratelimit-1",
-                workspace_id: workspace?.workspace_id || "ws-mock-workspace-1",
-                session_id: "mock-session",
-                approval_id: "appr-diff-mock-1",
-                status: "AWAITING_APPROVAL",
-                summary: "Add rate limit verification to patch proposal endpoints",
-                created_at: new Date().toISOString(),
-                diff_content: `--- a/app/api/v1/agent.py\n+++ b/app/api/v1/agent.py\n@@ -142,6 +142,9 @@ async def propose_patch(\n     session_id: uuid.UUID,\n     request: AgentPatchProposalRequest,\n     current_user: User = Depends(get_current_user),\n+    rate_limiter: RateLimiter = Depends(get_rate_limiter),\n ):\n+    await rate_limiter.check_rate_limit(current_user.id, "patch_proposal")\n     return await patch_service.propose_patch(db, session_id, current_user.id, request)\n`,
-                files: [
-                  {
-                    file_path: "app/api/v1/agent.py",
-                    operation: "MODIFY",
-                    hunks: [],
-                    reason: "Enforce request verification and rate limit check.",
-                  },
-                ],
-              }}
-            />
-
+            <AgentDiffView patch={getMockPatch(workspace?.workspace_id)} />
           </div>
         </div>
       )}
+
 
 
       {/* Rejected State */}
