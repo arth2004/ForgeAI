@@ -196,7 +196,8 @@ class MockChatModelProvider(BaseChatModelProvider):
                     tool_calls=list(self.default_response.tool_calls) if self.default_response.tool_calls else [],
                     id=str(uuid.uuid4()),
                 )
-            return AIMessage(content=str(self.default_response), id=str(uuid.uuid4()))
+            return AIMessage(content=self.default_response, id=str(uuid.uuid4()))
+
 
         # Check if the prompt is asking for an ImplementationPlan or feature planning
         user_text = ""
@@ -352,8 +353,9 @@ class GeminiChatModelProvider(BaseChatModelProvider):
     def _convert_messages_to_gemini_payload(
         self, messages: Sequence[BaseMessage]
     ) -> dict[str, Any]:
-        contents = []
+        contents: list[dict[str, Any]] = []
         system_instruction = None
+
 
         for msg in messages:
             if isinstance(msg, SystemMessage):

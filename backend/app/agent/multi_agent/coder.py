@@ -78,9 +78,13 @@ class CoderAgent(BaseEngineeringAgent):
         # If DB is available and valid UUIDs are present, use PatchService
         if db is not None and state.get("workspace_id") and state.get("session_id"):
             try:
-                session_id = uuid.UUID(str(state["session_id"]))
-                user_id = uuid.UUID(str(state["user_id"]))
-                ws_id = uuid.UUID(str(state["workspace_id"]))
+                raw_session_id = state["session_id"]
+                raw_user_id = state["user_id"]
+                raw_ws_id = state["workspace_id"]
+                session_id = raw_session_id if isinstance(raw_session_id, uuid.UUID) else uuid.UUID(str(raw_session_id))
+                user_id = raw_user_id if isinstance(raw_user_id, uuid.UUID) else uuid.UUID(str(raw_user_id))
+                ws_id = raw_ws_id if isinstance(raw_ws_id, uuid.UUID) else uuid.UUID(str(raw_ws_id))
+
 
                 affected = plan_data.get("affected_files", [])
                 patch_files: list[PatchFile] = []
