@@ -189,6 +189,27 @@ export interface AgentPullRequest {
   created_at: string;
 }
 
+export type RoleStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "WAITING_APPROVAL" | "SKIPPED";
+
+export interface AgentRoleState {
+  role: "PLANNER" | "CODER" | "TESTER" | "REVIEWER";
+  status: RoleStatus;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  iteration?: number | null;
+  repair_cycle?: number | null;
+  summary?: string | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface AgentWorkflowRoles {
+  PLANNER: AgentRoleState;
+  CODER: AgentRoleState;
+  TESTER: AgentRoleState;
+  REVIEWER: AgentRoleState;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -204,9 +225,14 @@ export interface ChatMessage {
   testExecution?: AgentTestExecution | null;
   commit?: AgentCommit | null;
   pullRequest?: AgentPullRequest | null;
+  task?: AgentTask | null;
+  review?: AgentReview | null;
+  workflowRoles?: AgentWorkflowRoles | null;
+  currentAgent?: "SUPERVISOR" | "PLANNER" | "CODER" | "TESTER" | "REVIEWER" | null;
   error?: string | null;
   timestamp: string;
 }
+
 
 export type AgentStreamEventType =
   | "session.created"

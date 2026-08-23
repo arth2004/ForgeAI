@@ -69,8 +69,9 @@ class CoderAgent(BaseEngineeringAgent):
             )
 
         if review_findings:
-            context_prompt += f"\n\nPREVIOUS REVIEW FINDINGS:\n"
+            context_prompt += "\n\nPREVIOUS REVIEW FINDINGS:\n"
             for finding in review_findings:
+
                 context_prompt += f"- [{finding.get('severity')}] {finding.get('file_path')}: {finding.get('description')}\n"
             context_prompt += "Please address all critical and high findings in this patch revision."
 

@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+
 import { ChatMessage } from "@/types";
 import { AgentActivity } from "./AgentActivity";
 import { AgentSources } from "./AgentSources";
@@ -8,9 +9,11 @@ import { AgentPlanView } from "./AgentPlanView";
 import { AgentDiffView } from "./AgentDiffView";
 import { AgentTestPanel } from "./AgentTestPanel";
 import { AgentGitPanel } from "./AgentGitPanel";
+import { AgentWorkflowTimeline } from "./AgentWorkflowTimeline";
+import { AgentRoleCard } from "./AgentRoleCard";
+import { AgentReviewFindings } from "./AgentReviewFindings";
+import { AgentTaskHeader } from "./AgentTaskHeader";
 import { Sparkles, User, AlertCircle, Loader2 } from "lucide-react";
-
-
 
 interface AgentMessageProps {
   message: ChatMessage;
@@ -18,6 +21,7 @@ interface AgentMessageProps {
 
 export function AgentMessage({ message }: AgentMessageProps) {
   const isUser = message.role === "user";
+  const [selectedRole, setSelectedRole] = useState<"PLANNER" | "CODER" | "TESTER" | "REVIEWER" | null>(null);
 
   if (isUser) {
     return (
@@ -58,6 +62,9 @@ export function AgentMessage({ message }: AgentMessageProps) {
     }
   }
 
+  const hasWorkflow = !!message.workflowRoles || !!message.task;
+  const activeRoleState = selectedRole && message.workflowRoles ? message.workflowRoles[selectedRole] : null;
+
   return (
     <div className="flex w-full justify-start" data-testid="assistant-message">
       <div className="flex max-w-[95%] items-start gap-3 sm:max-w-[85%]">
@@ -65,7 +72,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
           <Sparkles className="h-4 w-4" />
         </div>
 
-        <div className="flex-1 space-y-2 rounded-2xl rounded-tl-sm border border-white/10 bg-slate-900/90 p-4 text-xs text-slate-200 shadow-lg backdrop-blur-md">
+        <div className="flex-1 space-y-2.5 rounded-2xl rounded-tl-sm border border-white/10 bg-slate-900/90 p-4 text-xs text-slate-200 shadow-lg backdrop-blur-md">
           <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-slate-100">
               <span>Forge AI</span>
@@ -77,13 +84,38 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </div>
           </div>
 
+          {/* Phase 6C Multi-Agent Task Header */}
+          {message.task && <AgentTaskHeader task={message.task} />}
+
+          {/* Phase 6C Multi-Agent Workflow Timeline */}
+          {hasWorkflow && (
+            <AgentWorkflowTimeline
+              roles={message.workflowRoles}
+              currentAgent={message.currentAgent || message.task?.active_agent}
+              iterationCount={message.task?.iteration_count || 1}
+              selectedRole={selectedRole}
+              onSelectRole={(role) => setSelectedRole(selectedRole === role ? null : role)}
+            />
+          )}
+
+          {/* Detailed Selected Role Card */}
+          {activeRoleState && (
+            <AgentRoleCard
+              roleState={activeRoleState}
+              plan={displayedPlan}
+              patch={message.patch}
+              testExecution={message.testExecution}
+              review={message.review}
+            />
+          )}
+
           {/* Tool activity badges */}
           {hasToolActivity && (
             <AgentActivity activities={message.toolActivities!} isStreaming={isStreaming} />
           )}
 
           {/* Assistant content / loading */}
-          {isSending && !message.content && !hasToolActivity && (
+          {isSending && !message.content && !hasToolActivity && !hasWorkflow && (
             <div className="flex items-center gap-2 py-2 text-slate-400">
               <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
               <span>Analyzing question & selecting tools...</span>
@@ -106,19 +138,15 @@ export function AgentMessage({ message }: AgentMessageProps) {
             />
           )}
 
-
           {/* Phase 5C Proposed Patch Card & Gate 2 DIFF Approval */}
-          {message.patch && (
-            <AgentDiffView
-              patch={message.patch}
-            />
-          )}
+          {message.patch && <AgentDiffView patch={message.patch} />}
 
           {/* Phase 5C Sandboxed Test Execution Panel */}
-          {message.testExecution && (
-            <AgentTestPanel
-              testExecution={message.testExecution}
-            />
+          {message.testExecution && <AgentTestPanel testExecution={message.testExecution} />}
+
+          {/* Phase 6C Reviewer Security & Quality Audit Findings */}
+          {message.review && (
+            <AgentReviewFindings review={message.review} findings={message.review.findings} />
           )}
 
           {/* Phase 5D Git Branch, Commit & Pull Request Panel */}
@@ -131,11 +159,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
           )}
 
           {/* Sources Citations */}
-          {message.sources && message.sources.length > 0 && (
-            <AgentSources sources={message.sources} />
-          )}
-
-
+          {message.sources && message.sources.length > 0 && <AgentSources sources={message.sources} />}
 
           {/* Error Banner */}
           {message.status === "error" && (
@@ -154,4 +178,5 @@ export function AgentMessage({ message }: AgentMessageProps) {
     </div>
   );
 }
+
 

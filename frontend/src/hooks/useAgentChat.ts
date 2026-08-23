@@ -350,18 +350,293 @@ export function useAgentChat({ projectId, repositoryId, branchId }: UseAgentChat
                 );
                 break;
 
-              case "agent.pr.created":
+              case "agent.task.created":
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
                       ? {
                           ...msg,
-                          pullRequest: data.pull_request || data,
+                          task: data.task || data,
+                          currentAgent: data.active_agent || "SUPERVISOR",
                         }
                       : msg
                   )
                 );
                 break;
+
+              case "agent.planner.started":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "PENDING" },
+                      CODER: { role: "CODER", status: "PENDING" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      currentAgent: "PLANNER",
+                      workflowRoles: {
+                        ...existingRoles,
+                        PLANNER: {
+                          ...existingRoles.PLANNER,
+                          status: "RUNNING",
+                          started_at: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.planner.completed":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "PENDING" },
+                      CODER: { role: "CODER", status: "PENDING" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      plan: data.plan || msg.plan,
+                      workflowRoles: {
+                        ...existingRoles,
+                        PLANNER: {
+                          ...existingRoles.PLANNER,
+                          status: "COMPLETED",
+                          duration_ms: data.duration_ms || existingRoles.PLANNER.duration_ms,
+                          completed_at: new Date().toISOString(),
+                          summary: data.summary,
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.coder.started":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "PENDING" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      currentAgent: "CODER",
+                      workflowRoles: {
+                        ...existingRoles,
+                        CODER: {
+                          ...existingRoles.CODER,
+                          status: "RUNNING",
+                          repair_cycle: data.repair_cycle,
+                          started_at: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.coder.completed":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "PENDING" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      patch: data.patch || msg.patch,
+                      workflowRoles: {
+                        ...existingRoles,
+                        CODER: {
+                          ...existingRoles.CODER,
+                          status: "COMPLETED",
+                          duration_ms: data.duration_ms || existingRoles.CODER.duration_ms,
+                          completed_at: new Date().toISOString(),
+                          summary: data.summary,
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.tester.started":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "COMPLETED" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      currentAgent: "TESTER",
+                      workflowRoles: {
+                        ...existingRoles,
+                        TESTER: {
+                          ...existingRoles.TESTER,
+                          status: "RUNNING",
+                          started_at: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.tester.completed":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "COMPLETED" },
+                      TESTER: { role: "TESTER", status: "PENDING" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    const isPassed = data.status === "PASSED" || data.exit_code === 0;
+                    return {
+                      ...msg,
+                      testExecution: data.test_execution || msg.testExecution,
+                      workflowRoles: {
+                        ...existingRoles,
+                        TESTER: {
+                          ...existingRoles.TESTER,
+                          status: isPassed ? "COMPLETED" : "FAILED",
+                          duration_ms: data.duration_ms || existingRoles.TESTER.duration_ms,
+                          completed_at: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.reviewer.started":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "COMPLETED" },
+                      TESTER: { role: "TESTER", status: "COMPLETED" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    return {
+                      ...msg,
+                      currentAgent: "REVIEWER",
+                      workflowRoles: {
+                        ...existingRoles,
+                        REVIEWER: {
+                          ...existingRoles.REVIEWER,
+                          status: "RUNNING",
+                          started_at: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.reviewer.completed":
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMsgId) return msg;
+                    const existingRoles = msg.workflowRoles || {
+                      PLANNER: { role: "PLANNER", status: "COMPLETED" },
+                      CODER: { role: "CODER", status: "COMPLETED" },
+                      TESTER: { role: "TESTER", status: "COMPLETED" },
+                      REVIEWER: { role: "REVIEWER", status: "PENDING" },
+                    };
+                    const reviewObj = data.review || data;
+                    const isApproved = reviewObj.status === "APPROVED";
+                    return {
+                      ...msg,
+                      review: reviewObj,
+                      workflowRoles: {
+                        ...existingRoles,
+                        REVIEWER: {
+                          ...existingRoles.REVIEWER,
+                          status: isApproved ? "COMPLETED" : "FAILED",
+                          duration_ms: data.duration_ms || existingRoles.REVIEWER.duration_ms,
+                          completed_at: new Date().toISOString(),
+                          summary: reviewObj.summary,
+                        },
+                      },
+                    };
+                  })
+                );
+                break;
+
+              case "agent.handoff.created":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          currentAgent: data.target_agent || msg.currentAgent,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.workflow.completed":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          status: "completed",
+                          task: msg.task
+                            ? {
+                                ...msg.task,
+                                lifecycle_state: "COMPLETED",
+                                completed_at: new Date().toISOString(),
+                              }
+                            : msg.task,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
+              case "agent.workflow.failed":
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          status: "error",
+                          error: data.error || "Multi-agent workflow execution failed.",
+                          task: msg.task
+                            ? {
+                                ...msg.task,
+                                lifecycle_state: "FAILED",
+                                failure_reason: data.error,
+                              }
+                            : msg.task,
+                        }
+                      : msg
+                  )
+                );
+                break;
+
 
               case "agent.error": {
                 const errMsg =
