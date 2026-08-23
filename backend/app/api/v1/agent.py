@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.multi_agent.types import AgentTaskCreateRequest, AgentTaskResponse
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.auth import User
@@ -570,6 +571,161 @@ async def get_pull_request(
         user_id=current_user.id,
         pr_id=pull_id,
     )
+
+
+# --- Phase 6B Multi-Agent Task Endpoints ---
+
+
+@router.post(
+    "/tasks",
+    response_model=AgentTaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Multi-Agent Engineering Task",
+    description="Initializes a multi-agent engineering task managed by the EngineeringOrchestrator.",
+)
+async def create_agent_task(
+    request: AgentTaskCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentTaskResponse:
+    """Initializes an AgentTask for multi-agent execution."""
+    from sqlalchemy import select
+
+    from app.core.exceptions import ForbiddenException, NotFoundException
+    from app.models.agent import AgentSession, AgentTask, TaskLifecycleState
+    from app.services.project_service import ProjectService
+
+    # Verify project and tenant isolation
+    project_service = ProjectService(db)
+    project = await project_service.get_by_id(current_user.id, request.project_id)
+    if not project:
+        raise NotFoundException("Project", request.project_id)
+
+    # Resolve or create session
+    session_id = request.session_id
+    if session_id is None:
+        session = AgentSession(
+            user_id=current_user.id,
+            project_id=request.project_id,
+            repository_id=request.repository_id,
+            branch_id=request.branch_id,
+        )
+        db.add(session)
+        await db.flush()
+        session_id = session.id
+    else:
+        session_stmt = select(AgentSession).where(
+            AgentSession.id == session_id,
+            AgentSession.user_id == current_user.id,
+        )
+        session_res = await db.execute(session_stmt)
+        if not session_res.scalar_one_or_none():
+            raise ForbiddenException("Access to specified agent session forbidden.")
+
+    task = AgentTask(
+        session_id=session_id,
+        user_id=current_user.id,
+        organization_id=project.organization_id,
+        project_id=request.project_id,
+        repository_id=request.repository_id,
+        branch_id=request.branch_id,
+        title=request.title or (request.prompt[:60] + "..." if len(request.prompt) > 60 else request.prompt),
+        prompt=request.prompt,
+        lifecycle_state=TaskLifecycleState.TASK_CREATED.value,
+        active_agent="SUPERVISOR",
+        iteration_count=0,
+        tool_call_count=0,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    return AgentTaskResponse.model_validate(task)
+
+
+@router.get(
+    "/tasks/{task_id}",
+    response_model=AgentTaskResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Agent Task Details",
+    description="Retrieves status and lifecycle metrics for an AgentTask.",
+)
+async def get_agent_task(
+    task_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentTaskResponse:
+    """Retrieves an AgentTask record with tenant authorization checks."""
+    from sqlalchemy import select
+
+    from app.core.exceptions import ForbiddenException, NotFoundException
+    from app.models.agent import AgentTask
+    from app.services.organization_service import OrganizationService
+
+    stmt = select(AgentTask).where(AgentTask.id == task_id)
+    res = await db.execute(stmt)
+    task = res.scalar_one_or_none()
+
+    if not task:
+        raise NotFoundException(f"AgentTask {task_id} not found.")
+
+    org_service = OrganizationService(db)
+    user_orgs = await org_service.list_for_user(current_user.id)
+    user_org_ids = [o.id for o in user_orgs]
+
+    if task.organization_id not in user_org_ids:
+        raise ForbiddenException("Cross-tenant access to AgentTask forbidden.")
+
+    if task.user_id != current_user.id:
+        raise ForbiddenException("Cross-session access to AgentTask forbidden.")
+
+    return AgentTaskResponse.model_validate(task)
+
+
+@router.post(
+    "/tasks/{task_id}/cancel",
+    response_model=AgentTaskResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel Agent Task",
+    description="Gracefully terminates a running AgentTask and transitions to CANCELLED state.",
+)
+async def cancel_agent_task(
+    task_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AgentTaskResponse:
+    """Cancels an AgentTask."""
+    from sqlalchemy import select
+
+    from app.core.exceptions import ForbiddenException, NotFoundException
+    from app.models.agent import AgentTask, TaskLifecycleState
+    from app.models.base import utc_now
+    from app.services.organization_service import OrganizationService
+
+    stmt = select(AgentTask).where(AgentTask.id == task_id)
+    res = await db.execute(stmt)
+    task = res.scalar_one_or_none()
+
+    if not task:
+        raise NotFoundException(f"AgentTask {task_id} not found.")
+
+    org_service = OrganizationService(db)
+    user_orgs = await org_service.list_for_user(current_user.id)
+    user_org_ids = [o.id for o in user_orgs]
+
+    if task.organization_id not in user_org_ids:
+        raise ForbiddenException("Cross-tenant access to AgentTask forbidden.")
+
+    task.lifecycle_state = TaskLifecycleState.CANCELLED.value
+    task.failure_reason = "Cancelled by user request."
+    task.completed_at = utc_now()
+
+    await db.commit()
+    await db.refresh(task)
+
+    return AgentTaskResponse.model_validate(task)
+
+
 
 
 

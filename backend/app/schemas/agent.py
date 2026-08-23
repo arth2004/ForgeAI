@@ -1,8 +1,9 @@
 import datetime
 import enum
 import uuid
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChangeType(enum.StrEnum):
@@ -470,6 +471,47 @@ class AgentPullRequestResponse(BaseModel):
     body: str
     status: str
     created_at: datetime.datetime
+
+
+# --- Phase 6B Schemas: Multi-Agent Task & Review ---
+
+
+class AgentTaskCreateRequest(BaseModel):
+    """Request payload to initialize an orchestrator-managed multi-agent task."""
+
+    prompt: str = Field(..., min_length=3, max_length=10000, description="Engineering objective for the agent swarm.")
+    project_id: uuid.UUID
+    repository_id: uuid.UUID
+    branch_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
+    title: str | None = None
+
+
+class AgentTaskResponse(BaseModel):
+    """Response payload representing an AgentTask lifecycle state."""
+
+    id: uuid.UUID
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    organization_id: uuid.UUID
+    project_id: uuid.UUID
+    repository_id: uuid.UUID
+    branch_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+    title: str
+    prompt: str
+    lifecycle_state: str
+    active_agent: str
+    iteration_count: int
+    tool_call_count: int
+    failure_reason: str | None = None
+    metadata_json: dict[str, Any] | None = None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    completed_at: datetime.datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 

@@ -234,12 +234,72 @@ export type AgentStreamEventType =
   | "agent.push.completed"
   | "agent.pr.pending"
   | "agent.pr.created"
-  | "agent.git.error";
+  | "agent.git.error"
+  | "agent.task.created"
+  | "agent.planner.started"
+  | "agent.planner.completed"
+  | "agent.coder.started"
+  | "agent.coder.completed"
+  | "agent.tester.started"
+  | "agent.tester.completed"
+  | "agent.reviewer.started"
+  | "agent.reviewer.completed"
+  | "agent.handoff.created"
+  | "agent.workflow.completed"
+  | "agent.workflow.failed";
 
 export interface AgentStreamEvent {
   event: AgentStreamEventType;
   data: Record<string, any>;
 }
+
+// --- Phase 6B Multi-Agent Task & Review Types ---
+
+export interface ReviewFinding {
+  id: string;
+  severity: "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  category: "SECURITY" | "REGRESSION" | "CORRECTNESS" | "ARCHITECTURE" | "STYLE" | "TEST_COVERAGE";
+  file_path: string;
+  start_line?: number | null;
+  end_line?: number | null;
+  description: string;
+  evidence?: string | null;
+  recommendation?: string | null;
+}
+
+export interface AgentReview {
+  id: string;
+  task_id: string;
+  patch_id?: string | null;
+  status: "APPROVED" | "CHANGES_REQUESTED";
+  summary: string;
+  findings?: ReviewFinding[];
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface AgentTask {
+  id: string;
+  session_id: string;
+  user_id: string;
+  organization_id: string;
+  project_id: string;
+  repository_id: string;
+  branch_id?: string | null;
+  workspace_id?: string | null;
+  title: string;
+  prompt: string;
+  lifecycle_state: string;
+  active_agent: "SUPERVISOR" | "PLANNER" | "CODER" | "TESTER" | "REVIEWER";
+  iteration_count: number;
+  tool_call_count: number;
+  failure_reason?: string | null;
+  metadata_json?: Record<string, any> | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
 
 
 

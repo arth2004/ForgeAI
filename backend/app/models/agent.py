@@ -467,4 +467,237 @@ class AgentTestExecution(Base, UUIDMixin, TimestampMixin):
     )
 
 
+class TaskLifecycleState(enum.StrEnum):
+    TASK_CREATED = "TASK_CREATED"
+    PLANNING = "PLANNING"
+    PLAN_READY = "PLAN_READY"
+    WAITING_PLAN_APPROVAL = "WAITING_PLAN_APPROVAL"
+    WORKSPACE_READY = "WORKSPACE_READY"
+    IMPLEMENTING = "IMPLEMENTING"
+    PATCH_READY = "PATCH_READY"
+    WAITING_DIFF_APPROVAL = "WAITING_DIFF_APPROVAL"
+    TESTING = "TESTING"
+    TEST_PASSED = "TEST_PASSED"
+    TEST_FAILED = "TEST_FAILED"
+    CODING_REPAIR = "CODING_REPAIR"
+    REVIEWING = "REVIEWING"
+    REVIEW_PASSED = "REVIEW_PASSED"
+    REVIEW_FAILED = "REVIEW_FAILED"
+    WAITING_COMMIT_APPROVAL = "WAITING_COMMIT_APPROVAL"
+    COMMITTED = "COMMITTED"
+    WAITING_PUSH_APPROVAL = "WAITING_PUSH_APPROVAL"
+    PUSHED = "PUSHED"
+    WAITING_PR_APPROVAL = "WAITING_PR_APPROVAL"
+    PR_CREATED = "PR_CREATED"
+    COMPLETED = "COMPLETED"
+    WAITING_HUMAN_INTERVENTION = "WAITING_HUMAN_INTERVENTION"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class AgentRoleEnum(enum.StrEnum):
+    SUPERVISOR = "SUPERVISOR"
+    PLANNER = "PLANNER"
+    CODER = "CODER"
+    TESTER = "TESTER"
+    REVIEWER = "REVIEWER"
+
+
+class ReviewFindingSeverity(enum.StrEnum):
+    INFO = "INFO"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class ReviewCategory(enum.StrEnum):
+    SECURITY = "SECURITY"
+    REGRESSION = "REGRESSION"
+    CORRECTNESS = "CORRECTNESS"
+    ARCHITECTURE = "ARCHITECTURE"
+    STYLE = "STYLE"
+    TEST_COVERAGE = "TEST_COVERAGE"
+
+
+class AgentTask(Base, UUIDMixin, TimestampMixin):
+    """Tracks top-level multi-agent engineering task orchestration lifecycle."""
+
+    __tablename__ = "agent_tasks"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("repository_branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    prompt: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+    )
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(64),
+        default=TaskLifecycleState.TASK_CREATED.value,
+        nullable=False,
+        index=True,
+    )
+    active_agent: Mapped[str] = mapped_column(
+        String(32),
+        default=AgentRoleEnum.SUPERVISOR.value,
+        nullable=False,
+    )
+    iteration_count: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+    )
+    tool_call_count: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+    )
+    failure_reason: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        default=None,
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=True,
+        default=dict,
+    )
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+
+class AgentReview(Base, UUIDMixin, TimestampMixin):
+    """Stores structured code review reports produced by the Reviewer Agent."""
+
+    __tablename__ = "agent_reviews"
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    patch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_patches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default="APPROVED",
+        nullable=False,
+        index=True,
+    )
+    summary: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+
+class ReviewFinding(Base, UUIDMixin, TimestampMixin):
+    """Individual structured defect/security finding associated with an AgentReview."""
+
+    __tablename__ = "agent_review_findings"
+
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("agent_reviews.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    severity: Mapped[str] = mapped_column(
+        String(16),
+        default=ReviewFindingSeverity.INFO.value,
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(
+        String(32),
+        default=ReviewCategory.CORRECTNESS.value,
+        nullable=False,
+        index=True,
+    )
+    file_path: Mapped[str] = mapped_column(
+        String(1024),
+        nullable=False,
+    )
+    start_line: Mapped[int | None] = mapped_column(
+        nullable=True,
+        default=None,
+    )
+    end_line: Mapped[int | None] = mapped_column(
+        nullable=True,
+        default=None,
+    )
+    description: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+    )
+    evidence: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        default=None,
+    )
+    recommendation: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        default=None,
+    )
+
+
+
 
