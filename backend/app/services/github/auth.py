@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import NotFoundException, UnauthorizedException
+from app.core.exceptions import NotFoundException, UnauthorizedException, ValidationException
 from app.core.telemetry import logger
 from app.models.auth import User
 from app.services.github.client import github_client
@@ -74,12 +74,17 @@ class GitHubAuthService:
             raise UnauthorizedException("Invalid OAuth state.") from e
 
     @classmethod
-    def get_authorization_url(cls, user_id: uuid.UUID) -> str:
+    def get_authorization_url(cls, user_id: uuid.UUID, redirect_uri: str | None = None) -> str:
         """Generates the GitHub OAuth authorization URL with signed state."""
+        if not settings.GITHUB_CLIENT_ID:
+            raise ValidationException(
+                "GITHUB_CLIENT_ID is not configured. Please set GITHUB_CLIENT_ID in your Render environment variables."
+            )
         state = cls.generate_state(user_id)
+        effective_redirect = redirect_uri or settings.GITHUB_REDIRECT_URI
         params = {
             "client_id": settings.GITHUB_CLIENT_ID,
-            "redirect_uri": settings.GITHUB_REDIRECT_URI,
+            "redirect_uri": effective_redirect,
             "state": state,
         }
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"

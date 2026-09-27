@@ -37,10 +37,18 @@ router = APIRouter()
     summary="Get GitHub App installation and authorization URL",
 )
 async def get_github_authorize_url(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> GitHubAuthUrlResponse:
     """Generates an authorization URL with a cryptographically signed CSRF state."""
-    auth_url = github_auth_service.get_authorization_url(current_user.id)
+    redirect_uri = settings.GITHUB_REDIRECT_URI
+    if not redirect_uri or "localhost" in redirect_uri:
+        base_url = str(request.base_url).rstrip("/")
+        if request.headers.get("x-forwarded-proto") == "https" and base_url.startswith("http://"):
+            base_url = "https://" + base_url[len("http://"):]
+        redirect_uri = f"{base_url}/api/v1/github/callback"
+
+    auth_url = github_auth_service.get_authorization_url(current_user.id, redirect_uri=redirect_uri)
     return GitHubAuthUrlResponse(authorization_url=auth_url)
 
 
