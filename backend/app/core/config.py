@@ -184,10 +184,10 @@ class Settings(BaseSettings):
                     "unique secret with at least 32 characters in production."
                 )
 
-            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in insecure_enc_defaults or len(self.ENCRYPTION_KEY) != 64:
+            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in insecure_enc_defaults or len(self.ENCRYPTION_KEY) < 32:
                 raise ValueError(
-                    "CRITICAL SECURITY CONFIGURATION: ENCRYPTION_KEY must be a valid 64-character "
-                    "hex string (32 bytes) in production."
+                    "CRITICAL SECURITY CONFIGURATION: ENCRYPTION_KEY must be a secure key "
+                    "with at least 32 characters (or 64-character hex) in production."
                 )
 
             if not self.GITHUB_WEBHOOK_SECRET or self.GITHUB_WEBHOOK_SECRET in insecure_webhook_defaults:

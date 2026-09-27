@@ -32,11 +32,11 @@ def test_production_security_validation_fails_on_defaults():
         )
 
     # Insecure encryption key
-    with pytest.raises(ValueError, match="ENCRYPTION_KEY must be a valid 64-character"):
+    with pytest.raises(ValueError, match="ENCRYPTION_KEY must be a secure key"):
         Settings(
             ENVIRONMENT="production",
             JWT_SECRET="a" * 32,
-            ENCRYPTION_KEY="invalid-length-key",
+            ENCRYPTION_KEY="invalid-short-key",
         )
 
 

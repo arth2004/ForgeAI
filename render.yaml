@@ -23,7 +23,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: forgeai-redis
           property: connectionString
       - key: JWT_SECRET
@@ -35,10 +35,7 @@ services:
       - key: BACKEND_CORS_ORIGINS
         value: '["https://forgeai-frontend.onrender.com"]'
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: forgeai-frontend
-          property: url
+        value: https://forgeai-frontend.onrender.com
       - key: AGENT_DEFAULT_PROVIDER
         value: groq
       - key: GROQ_API_KEY
@@ -68,7 +65,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: forgeai-redis
           property: connectionString
       - key: JWT_SECRET
@@ -107,13 +104,20 @@ services:
       - key: NODE_VERSION
         value: 20.x
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: forgeai-api
-          property: url
+        value: https://forgeai-api.onrender.com
+
+  # --------------------------------------------------------------------------
+  # 4. Redis Key-Value Store (Managed Instance)
+  # --------------------------------------------------------------------------
+  - type: keyvalue
+    name: forgeai-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
 
 # ----------------------------------------------------------------------------
-# Databases & Cache
+# PostgreSQL Database with pgvector
 # ----------------------------------------------------------------------------
 databases:
   - name: forgeai-postgres
@@ -122,6 +126,3 @@ databases:
     databaseName: forgeai
     user: forgeai
     postgresMajorVersion: 16
-
-# Redis Instance (Managed Key-Value Store)
-# Note: Render allows provisioning Redis as a service
