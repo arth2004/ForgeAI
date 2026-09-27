@@ -32,9 +32,9 @@ services:
       - key: GITHUB_WEBHOOK_SECRET
         generateValue: true
       - key: BACKEND_CORS_ORIGINS
-        value: '["https://forgeai-frontend.onrender.com"]'
+        value: '["https://forgeai-frontend-a2dr.onrender.com","https://forgeai-frontend.onrender.com"]'
       - key: FRONTEND_URL
-        value: https://forgeai-frontend.onrender.com
+        value: https://forgeai-frontend-a2dr.onrender.com
       - key: AGENT_DEFAULT_PROVIDER
         value: groq
       - key: GROQ_API_KEY
