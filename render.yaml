@@ -58,7 +58,7 @@ services:
       - key: NODE_VERSION
         value: 20.x
       - key: NEXT_PUBLIC_API_URL
-        value: https://forgeai-api.onrender.com
+        value: https://forgeai-api-wkc9.onrender.com
 
   # --------------------------------------------------------------------------
   # 3. Redis Key-Value Store (100% Free Plan)
