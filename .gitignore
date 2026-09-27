@@ -59,3 +59,8 @@ Thumbs.db
 # Docker / Logs
 *.log
 docker-data/
+
+# Temporary / Scratch
+scratch/
+**/scratch/
+

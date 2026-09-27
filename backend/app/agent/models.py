@@ -6,12 +6,13 @@ import re
 import time
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
 import httpx
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -99,22 +100,25 @@ def extract_retry_delay(
         pass
 
     # 4. Parsed error text
-    err_text = response.text
-    match = re.search(
-        r"(?:try again in|retry in|wait)\s+([0-9\.]+)\s*(?:s|seconds)?",
-        err_text,
-        re.IGNORECASE,
-    )
-    if match:
-        try:
-            return min(float(match.group(1)) + 0.2, 10.0)
-        except ValueError:
-            pass
+    try:
+        err_text = response.text
+        match = re.search(
+            r"(?:try again in|retry in|wait)\s+([0-9\.]+)\s*(?:s|seconds)?",
+            err_text,
+            re.IGNORECASE,
+        )
+        if match:
+            try:
+                return min(float(match.group(1)) + 0.2, 15.0)
+            except ValueError:
+                pass
+    except Exception:
+        pass
 
     # 5. Bounded exponential backoff with jitter
     jitter = random.uniform(0.0, 0.25)
     backoff = (default_base * (2**attempt)) + jitter
-    return min(backoff, 10.0)
+    return min(backoff, 15.0)
 
 
 class BaseChatModelProvider(ABC):
@@ -135,6 +139,14 @@ class BaseChatModelProvider(ABC):
     async def ainvoke(self, messages: Sequence[BaseMessage], **kwargs: Any) -> BaseMessage:
         """Asynchronously sends messages to the model provider and returns a standard BaseMessage."""
         ...
+
+    @abstractmethod
+    def astream(
+        self, messages: Sequence[BaseMessage], **kwargs: Any
+    ) -> AsyncGenerator[AIMessageChunk, None]:
+        """Asynchronously streams incremental model output chunks."""
+        ...
+
 
 
 class MockChatModelProvider(BaseChatModelProvider):
@@ -254,6 +266,55 @@ class MockChatModelProvider(BaseChatModelProvider):
             id=str(uuid.uuid4()),
         )
 
+    async def astream(
+        self, messages: Sequence[BaseMessage], **kwargs: Any
+    ) -> AsyncGenerator[AIMessageChunk, None]:
+        """Asynchronously streams chunks for mock responses."""
+        if self.should_fail:
+            self.call_history.append(list(messages))
+            raise ModelProviderException(
+                message=self.failure_message,
+                provider=self.provider_name,
+            )
+
+        full_msg = await self.ainvoke(messages, **kwargs)
+
+        tool_calls = getattr(full_msg, "tool_calls", None) or []
+        if tool_calls:
+            yield AIMessageChunk(
+                content="",
+                additional_kwargs={
+                    "tool_calls": [
+                        {
+                            "id": tc.get("id", str(uuid.uuid4())),
+                            "type": "function",
+                            "function": {
+                                "name": tc.get("name"),
+                                "arguments": json.dumps(tc.get("args", {})),
+                            },
+                        }
+                        for tc in tool_calls
+                    ]
+                },
+                tool_calls=tool_calls,
+                id=full_msg.id,
+            )
+            return
+
+        content_str = str(full_msg.content)
+        if not content_str:
+            yield AIMessageChunk(content="", id=full_msg.id)
+            return
+
+        words = re.findall(r"\S+|\s+", content_str)
+        if not words:
+            yield AIMessageChunk(content=content_str, id=full_msg.id)
+            return
+
+        for word in words:
+            yield AIMessageChunk(content=word, id=full_msg.id)
+
+
 
 
 class GeminiChatModelProvider(BaseChatModelProvider):
@@ -267,7 +328,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
         max_tokens: int | None = 4096,
         timeout_seconds: float = 60.0,
     ):
-        resolved_model = model_name or settings.AGENT_GEMINI_MODEL or "gemini-3.1-pro-preview"
+        resolved_model = model_name or settings.AGENT_GEMINI_MODEL or "gemini-3.1-flash-lite"
         super().__init__(model_name=resolved_model, temperature=temperature, max_tokens=max_tokens)
         self._api_key = api_key or settings.GEMINI_API_KEY
         self._timeout = timeout_seconds
@@ -351,7 +412,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
         ]
 
     def _convert_messages_to_gemini_payload(
-        self, messages: Sequence[BaseMessage]
+        self, messages: Sequence[BaseMessage], **kwargs: Any
     ) -> dict[str, Any]:
         contents: list[dict[str, Any]] = []
         system_instruction = None
@@ -406,8 +467,13 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             "generationConfig": {
                 "temperature": self.temperature,
             },
-            "tools": self._get_gemini_tools_declaration(),
         }
+        tools_decl = kwargs.get("tools")
+        if tools_decl is None and "tools" not in kwargs:
+            tools_decl = self._get_gemini_tools_declaration()
+        if tools_decl:
+            payload["tools"] = tools_decl
+
         if self.max_tokens:
             payload["generationConfig"]["maxOutputTokens"] = self.max_tokens
         if system_instruction:
@@ -422,7 +488,7 @@ class GeminiChatModelProvider(BaseChatModelProvider):
                 provider=self.provider_name,
             )
 
-        payload = self._convert_messages_to_gemini_payload(messages)
+        payload = self._convert_messages_to_gemini_payload(messages, **kwargs)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent"
         headers = {
             "x-goog-api-key": self._api_key,
@@ -520,6 +586,106 @@ class GeminiChatModelProvider(BaseChatModelProvider):
             provider=self.provider_name,
             status_code=429,
         )
+
+    async def astream(
+        self, messages: Sequence[BaseMessage], **kwargs: Any
+    ) -> AsyncGenerator[AIMessageChunk, None]:
+        if not self._api_key:
+            raise ModelProviderException(
+                message="GEMINI_API_KEY is not configured in settings or environment.",
+                provider=self.provider_name,
+            )
+
+        payload = self._convert_messages_to_gemini_payload(messages, **kwargs)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:streamGenerateContent?alt=sse"
+        headers = {
+            "x-goog-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+
+        max_retries = 3
+        start_time = time.perf_counter()
+
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    async with client.stream("POST", url, headers=headers, json=payload) as response:
+                        if response.status_code == 429 and attempt < max_retries:
+                            await response.aread()
+                            wait_seconds = extract_retry_delay(response, attempt)
+                            logger.warning(
+                                f"[agent.model.rate_limited] provider={self.provider_name} "
+                                f"model={self.model_name} attempt={attempt + 1}/{max_retries} "
+                                f"retry_delay_seconds={wait_seconds:.2f}"
+                            )
+                            await asyncio.sleep(wait_seconds)
+                            continue
+
+                        if response.status_code != 200:
+                            err_body = await response.aread()
+                            sanitized_error = sanitize_secret_text(err_body.decode("utf-8", errors="replace"))
+                            err_detail = sanitized_error
+                            try:
+                                err_json = json.loads(err_body)
+                                if isinstance(err_json, dict) and "error" in err_json:
+                                    err_obj = err_json["error"]
+                                    if isinstance(err_obj, dict) and "message" in err_obj:
+                                        err_detail = err_obj["message"]
+                            except Exception:
+                                pass
+                            raise ModelProviderException(
+                                message=f"Gemini API returned status {response.status_code}: {err_detail}",
+                                provider=self.provider_name,
+                                status_code=response.status_code,
+                            )
+
+                        chunk_count = 0
+                        async for line in response.aiter_lines():
+                            line = line.strip()
+                            if not line or line.startswith(":"):
+                                continue
+                            if line.startswith("data: "):
+                                data_str = line[6:].strip()
+                                try:
+                                    chunk_data = json.loads(data_str)
+                                except json.JSONDecodeError:
+                                    continue
+
+                                candidates = chunk_data.get("candidates", [])
+                                if not candidates:
+                                    continue
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                for part in parts:
+                                    if "text" in part and part["text"]:
+                                        chunk_count += 1
+                                        yield AIMessageChunk(content=part["text"])
+                                    if "functionCall" in part:
+                                        fc = part["functionCall"]
+                                        chunk_count += 1
+                                        yield AIMessageChunk(
+                                            content="",
+                                            additional_kwargs={"functionCall": fc},
+                                        )
+
+                        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                        logger.info(
+                            f"[agent.model.stream_completed] provider={self.provider_name} "
+                            f"model={self.model_name} duration_ms={duration_ms} chunks={chunk_count}"
+                        )
+                        return
+
+            except ModelProviderException:
+                raise
+            except Exception as e:
+                sanitized = sanitize_secret_text(str(e))
+                logger.error(
+                    f"[agent.model.error] provider={self.provider_name} model={self.model_name} error={sanitized}"
+                )
+                raise ModelProviderException(
+                    message=f"Gemini connection failed: {sanitized}",
+                    provider=self.provider_name,
+                ) from None
+
 
 
 class OpenAIChatModelProvider(BaseChatModelProvider):
@@ -640,17 +806,27 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
                 tool_calls = getattr(msg, "tool_calls", None) or []
                 if tool_calls:
                     entry["content"] = str(msg.content) if msg.content else None
-                    entry["tool_calls"] = [
-                        {
-                            "id": tc.get("id", str(uuid.uuid4())),
-                            "type": "function",
-                            "function": {
-                                "name": tc.get("name"),
-                                "arguments": json.dumps(tc.get("args", {})),
-                            },
-                        }
-                        for tc in tool_calls
-                    ]
+                    tool_calls_payload = []
+                    for tc in tool_calls:
+                        tc_args = tc.get("args", {})
+                        if isinstance(tc_args, str):
+                            arg_str = tc_args
+                        else:
+                            try:
+                                arg_str = json.dumps(tc_args)
+                            except Exception:
+                                arg_str = "{}"
+                        tool_calls_payload.append(
+                            {
+                                "id": tc.get("id", str(uuid.uuid4())),
+                                "type": "function",
+                                "function": {
+                                    "name": str(tc.get("name", "")).split(".")[-1].split(":")[-1],
+                                    "arguments": arg_str,
+                                },
+                            }
+                        )
+                    entry["tool_calls"] = tool_calls_payload
                 else:
                     entry["content"] = str(msg.content)
                 formatted.append(entry)
@@ -681,8 +857,15 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
             "model": self.model_name,
             "messages": formatted_messages,
             "temperature": self.temperature,
-            "tools": self._get_openai_tools_declaration(),
         }
+        tools_decl = kwargs.get("tools")
+        if tools_decl is None and "tools" not in kwargs:
+            tools_decl = self._get_openai_tools_declaration()
+        if tools_decl:
+            payload["tools"] = tools_decl
+        if "tool_choice" in kwargs:
+            payload["tool_choice"] = kwargs["tool_choice"]
+
         if self.max_tokens:
             payload["max_tokens"] = self.max_tokens
 
@@ -692,7 +875,7 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
             "Content-Type": "application/json",
         }
 
-        max_retries = 3
+        max_retries = kwargs.get("max_retries", 3)
         start_time = time.perf_counter()
 
         for attempt in range(max_retries + 1):
@@ -779,6 +962,126 @@ class OpenAIChatModelProvider(BaseChatModelProvider):
             provider=self.provider_name,
             status_code=429,
         )
+
+    async def astream(
+        self, messages: Sequence[BaseMessage], **kwargs: Any
+    ) -> AsyncGenerator[AIMessageChunk, None]:
+        if not self._api_key:
+            raise ModelProviderException(
+                message=f"API key for {self.provider_name} provider is not configured in settings or environment.",
+                provider=self.provider_name,
+            )
+
+        formatted_messages = self._convert_messages_to_openai_payload(messages)
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": formatted_messages,
+            "temperature": self.temperature,
+            "stream": True,
+        }
+        tools_decl = kwargs.get("tools")
+        if tools_decl is None and "tools" not in kwargs:
+            tools_decl = self._get_openai_tools_declaration()
+        if tools_decl:
+            payload["tools"] = tools_decl
+        if "tool_choice" in kwargs:
+            payload["tool_choice"] = kwargs["tool_choice"]
+
+        if self.max_tokens:
+            payload["max_tokens"] = self.max_tokens
+
+        url = f"{self._base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        max_retries = kwargs.get("max_retries", 3)
+        start_time = time.perf_counter()
+
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    async with client.stream("POST", url, headers=headers, json=payload) as response:
+                        if response.status_code == 429 and attempt < max_retries:
+                            await response.aread()
+                            wait_seconds = extract_retry_delay(response, attempt)
+                            logger.warning(
+                                f"[agent.model.rate_limited] provider={self.provider_name} "
+                                f"model={self.model_name} attempt={attempt + 1}/{max_retries} "
+                                f"retry_delay_seconds={wait_seconds:.2f}"
+                            )
+                            await asyncio.sleep(wait_seconds)
+                            continue
+
+                        if response.status_code != 200:
+                            err_body = await response.aread()
+                            sanitized_error = sanitize_secret_text(err_body.decode("utf-8", errors="replace"))
+                            err_detail = sanitized_error
+                            try:
+                                err_json = json.loads(err_body)
+                                if isinstance(err_json, dict) and "error" in err_json:
+                                    err_obj = err_json["error"]
+                                    if isinstance(err_obj, dict) and "message" in err_obj:
+                                        err_detail = err_obj["message"]
+                            except Exception:
+                                pass
+                            raise ModelProviderException(
+                                message=f"{self.provider_name} API returned status {response.status_code}: {err_detail}",
+                                provider=self.provider_name,
+                                status_code=response.status_code,
+                            )
+
+                        chunk_count = 0
+                        async for line in response.aiter_lines():
+                            line = line.strip()
+                            if not line or line.startswith(":"):
+                                continue
+                            if line.startswith("data: "):
+                                data_str = line[6:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    chunk_data = json.loads(data_str)
+                                except json.JSONDecodeError:
+                                    continue
+
+                                choices = chunk_data.get("choices", [])
+                                if not choices:
+                                    continue
+                                delta = choices[0].get("delta", {})
+                                content_piece = delta.get("content")
+                                raw_tool_calls = delta.get("tool_calls")
+
+                                if content_piece:
+                                    chunk_count += 1
+                                    yield AIMessageChunk(content=content_piece)
+                                elif raw_tool_calls:
+                                    chunk_count += 1
+                                    yield AIMessageChunk(
+                                        content="",
+                                        additional_kwargs={"tool_calls": raw_tool_calls},
+                                    )
+
+                        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                        logger.info(
+                            f"[agent.model.stream_completed] provider={self.provider_name} "
+                            f"model={self.model_name} duration_ms={duration_ms} chunks={chunk_count}"
+                        )
+                        return
+
+            except ModelProviderException:
+                raise
+            except Exception as e:
+                sanitized = sanitize_secret_text(str(e))
+                logger.error(
+                    f"[agent.model.error] provider={self.provider_name} model={self.model_name} error={sanitized}"
+                )
+                raise ModelProviderException(
+                    message=f"{self.provider_name} connection failed: {sanitized}",
+                    provider=self.provider_name,
+                ) from None
+
 
 
 def get_chat_model_provider(

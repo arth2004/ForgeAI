@@ -301,6 +301,32 @@ class GitHubClient:
         )
         return response.json()
 
+    async def get_pull_request_diff(
+        self,
+        installation_id: int,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> str:
+        """Fetches the unified diff of a GitHub pull request in raw text format."""
+        token = await self.get_installation_access_token(installation_id)
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3.diff",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        async with httpx.AsyncClient(base_url=self.BASE_URL, timeout=20.0) as client:
+            response = await client.get(
+                f"/repos/{owner}/{repo}/pulls/{pull_number}",
+                headers=headers,
+            )
+            if response.status_code == 404:
+                raise NotFoundException(f"Pull request #{pull_number} not found.")
+            elif response.status_code >= 400:
+                raise GitHubApiError(response.status_code, "Failed to fetch pull request diff.")
+            return response.text
+
 
 github_client = GitHubClient()
+
 

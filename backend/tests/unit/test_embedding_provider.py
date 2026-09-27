@@ -19,9 +19,10 @@ def test_embedding_factory_defaults():
     provider = get_embedding_provider("google")
     assert isinstance(provider, GeminiEmbeddingProvider)
     assert provider.provider_name == "google"
-    assert provider.model_name == "gemini-embedding-2"
+    assert provider.model_name == "gemini-embedding-001"
     assert provider.dimension == 768
     assert provider.version == 1
+
 
     openai_provider = get_embedding_provider("openai")
     assert isinstance(openai_provider, OpenAIEmbeddingProvider)

@@ -1,8 +1,22 @@
 .venv
 __pycache__
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache
 .coverage
 htmlcov
 .ruff_cache
 .mypy_cache
+
+# Secrets and environment configurations
+.env
+.env.*
+*.pem
+*.key
+
+# Tests and temporary scratch artifacts
+tests/
+scratch/
+docs/
+*.md

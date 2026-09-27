@@ -35,6 +35,14 @@ from app.models.codebase import (
     RepositoryFile,
     RepositoryIndexVersion,
 )
+from app.models.github import (
+    GitHubInstallation,
+    GitHubRepositoryBinding,
+    PRReviewLifecycleState,
+    PullRequestReviewTask,
+    PullRequestSnapshot,
+    WebhookDelivery,
+)
 from app.models.project import IndexingStatus, Project, Repository, RepositoryBranch
 
 __all__ = [
@@ -80,4 +88,11 @@ __all__ = [
     "TestExecutionStatus",
     "PullRequestStatus",
     "WorkspaceStatus",
+    "GitHubInstallation",
+    "GitHubRepositoryBinding",
+    "PullRequestSnapshot",
+    "PullRequestReviewTask",
+    "WebhookDelivery",
+    "PRReviewLifecycleState",
 ]
+

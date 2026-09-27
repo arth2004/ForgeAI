@@ -46,17 +46,16 @@ services:
     env_file:
       - .env
     environment:
-      ENVIRONMENT: development
-      LOG_LEVEL: INFO
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      BACKEND_CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/forgeai
-      REDIS_URL: redis://redis:6379/0
-      FRONTEND_URL: http://localhost:3000
-      AGENT_DEFAULT_PROVIDER: ${AGENT_DEFAULT_PROVIDER:-mock}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/forgeai}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      AGENT_DEFAULT_PROVIDER: ${AGENT_DEFAULT_PROVIDER:-groq}
     ports:
-
       - "8000:8000"
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
@@ -76,10 +75,10 @@ services:
     env_file:
       - .env
     environment:
-      ENVIRONMENT: development
-      LOG_LEVEL: INFO
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/forgeai
-      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/forgeai}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     command: python -m arq app.workers.main.WorkerSettings
     depends_on:
       postgres:
@@ -93,10 +92,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: forgeai-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:

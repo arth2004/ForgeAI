@@ -19,6 +19,8 @@ async def test_health_endpoint_healthy(client: AsyncClient):
 
         response = await client.get("/api/v1/health")
         assert response.status_code == 200
+        assert response.headers.get("x-content-type-options") == "nosniff"
+        assert response.headers.get("x-frame-options") == "DENY"
         data = response.json()
         assert data["status"] == "ok"
         assert data["services"]["database"] == "ok"

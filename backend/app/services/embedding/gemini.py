@@ -164,19 +164,110 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         return results
 
     async def embed_query(self, text: str) -> list[float]:
-        """Embeds a single search query."""
+        """Embeds a single search query using the Gemini :embedContent endpoint."""
         if not text:
             return [0.0] * self._dimension
 
         if not self._api_key:
             raise ForgeAIException("GEMINI_API_KEY is not configured.", status_code=500)
 
-        batch_embeddings = await self._embed_batch_with_retry([text], task_type="RETRIEVAL_QUERY")
-        if not batch_embeddings:
+        embedding = await self._embed_single_with_retry(text, task_type="RETRIEVAL_QUERY")
+        if not embedding:
             raise ForgeAIException(
                 "Failed to generate query embedding from Gemini.", status_code=502
             )
-        return batch_embeddings[0]
+        return embedding
+
+    async def _embed_single_with_retry(
+        self,
+        text: str,
+        task_type: str = "RETRIEVAL_QUERY",
+        max_retries: int = 4,
+    ) -> list[float]:
+        """Calls Gemini :embedContent endpoint for single query embedding."""
+        url = f"{self.BASE_URL}/models/{self._model}:embedContent?key={self._api_key}"
+        payload: dict[str, Any] = {
+            "model": f"models/{self._model}",
+            "content": {"parts": [{"text": text}]},
+            "taskType": task_type,
+            "outputDimensionality": self._dimension,
+        }
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(url, json=payload)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if "embedding" in data:
+                        return data["embedding"].get("values", [])
+                    elif "embeddings" in data and data["embeddings"]:
+                        return data["embeddings"][0].get("values", [])
+                    return []
+
+
+                try:
+                    resp_data = response.json()
+                except Exception:
+                    resp_data = {}
+
+                # 1. Check for daily / project quota exhaustion (immediate fail, NO repeated retries)
+                if is_daily_or_project_quota_exhaustion(resp_data, response.status_code):
+                    logger.error(
+                        "Gemini daily/project embedding quota exhausted. Aborting retries immediately."
+                    )
+                    raise EmbeddingQuotaExhaustedException(
+                        "Gemini embedding quota exhausted. Indexing can resume when the provider quota resets or billing/quota is increased.",
+                        details={
+                            "provider": "google",
+                            "model": self._model,
+                            "status_code": 429,
+                            "quota_type": "daily_or_project_exhausted",
+                        },
+                    )
+
+                # 2. Check for temporary rate limit (429) or transient 5xx errors
+                elif response.status_code in (429, 500, 502, 503, 504):
+                    if attempt < max_retries - 1:
+                        parsed_delay = parse_retry_delay(resp_data, response.headers)
+                        if parsed_delay is not None and 0.5 <= parsed_delay <= 60.0:
+                            delay = parsed_delay + random.uniform(0.1, 0.5)
+                        elif response.status_code == 429:
+                            delay = min((2**attempt) * 5.0 + random.uniform(0.5, 2.0), 60.0)
+                        else:
+                            delay = min((2**attempt) + random.uniform(0.1, 0.5), 30.0)
+
+                        logger.warning(
+                            f"Gemini embedding rate limit / error ({response.status_code}). "
+                            f"Retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        safe_msg = sanitize_error(response.text, self._api_key)
+                        raise ForgeAIException(
+                            f"Gemini embedding API rate limit/error exceeded after {max_retries} attempts: {safe_msg}",
+                            status_code=502,
+                        )
+                else:
+                    safe_msg = sanitize_error(response.text, self._api_key)
+                    raise ForgeAIException(
+                        f"Gemini embedding API error ({response.status_code}): {safe_msg}",
+                        status_code=502,
+                    )
+
+            except httpx.RequestError as exc:
+                if attempt < max_retries - 1:
+                    delay = (2**attempt) + random.uniform(0.1, 0.5)
+                    await asyncio.sleep(delay)
+                    continue
+                safe_exc = sanitize_error(str(exc), self._api_key)
+                raise ForgeAIException(
+                    f"Network error calling Gemini embedding API: {safe_exc}", status_code=502
+                ) from exc
+
+        return []
 
     async def _embed_batch_with_retry(
         self,
@@ -273,3 +364,4 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 ) from exc
 
         return []
+

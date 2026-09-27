@@ -237,6 +237,7 @@ export interface ChatMessage {
 export type AgentStreamEventType =
   | "session.created"
   | "agent.started"
+  | "agent.token"
   | "agent.tool_call"
   | "agent.tool_result"
   | "agent.completed"
@@ -317,6 +318,7 @@ export interface AgentTask {
   prompt: string;
   lifecycle_state: string;
   active_agent: "SUPERVISOR" | "PLANNER" | "CODER" | "TESTER" | "REVIEWER";
+
   iteration_count: number;
   tool_call_count: number;
   failure_reason?: string | null;
@@ -326,6 +328,48 @@ export interface AgentTask {
   completed_at?: string | null;
 }
 
+// --- Phase 7B GitHub PR Reviewer Types ---
 
+export type PRReviewLifecycleState =
 
+  | "RECEIVED"
+  | "VALIDATING"
+  | "SNAPSHOTTING"
+  | "QUEUED"
+  | "ANALYZING"
+  | "REVIEW_READY"
+  | "SHA_VALIDATION"
+  | "STALE"
+  | "FAILED"
+  | "REJECTED";
 
+export interface PRSnapshot {
+  id: string;
+  repository_binding_id: string;
+  pr_number: number;
+  title: string;
+  body_summary?: string | null;
+  author_username: string;
+  base_branch: string;
+  base_sha: string;
+  head_branch: string;
+  head_sha: string;
+  is_draft: boolean;
+  changed_files_count: number;
+  created_at: string;
+}
+
+export interface PRReviewTask {
+  id: string;
+  snapshot_id: string;
+  snapshot?: PRSnapshot | null;
+  lifecycle_state: PRReviewLifecycleState;
+  active_agent: string;
+  total_findings_count: number;
+  critical_count: number;
+  high_count: number;
+  findings: ReviewFinding[];
+  started_at?: string | null;
+  completed_at?: string | null;
+  failure_reason?: string | null;
+}

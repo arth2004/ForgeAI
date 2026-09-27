@@ -22,6 +22,7 @@ class AgentState(TypedDict, total=False):
     tool_results: list[dict[str, Any]]
     final_answer: str | None
     iteration_count: int
+    max_iterations: int
     metadata: dict[str, Any]
 
     # Phase 5B Planning & Workspace State

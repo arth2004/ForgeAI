@@ -75,39 +75,73 @@ class ReviewerAgent(BaseEngineeringAgent):
             ),
         ]
 
-        response = await self.model_provider.ainvoke(messages)
+        response = await self.model_provider.ainvoke(messages, tools=None)
         content_text = str(response.content)
 
-        findings: list[dict[str, Any]] = []
-        review_status = "APPROVED"
-        summary = "Review completed. No blocking security or regression findings detected."
+        clean_json = content_text.strip()
+        if clean_json.startswith("```json"):
+            clean_json = clean_json.removeprefix("```json").removesuffix("```").strip()
+        elif clean_json.startswith("```"):
+            clean_json = clean_json.removeprefix("```").removesuffix("```").strip()
 
         try:
-            clean_json = content_text.strip()
-            if clean_json.startswith("```json"):
-                clean_json = clean_json.removeprefix("```json").removesuffix("```").strip()
-            elif clean_json.startswith("```"):
-                clean_json = clean_json.removeprefix("```").removesuffix("```").strip()
-
             parsed = json.loads(clean_json)
-            review_status = parsed.get("status", "APPROVED")
-            summary = parsed.get("summary", summary)
-            raw_findings = parsed.get("findings", [])
+        except Exception as json_err:
+            logger.error("ReviewerAgent received unparseable JSON response from model: %s", json_err)
+            raise ValueError(f"Reviewer model response is not valid JSON: {json_err}") from json_err
 
-            for f in raw_findings:
-                finding_obj = ReviewFindingSchema(
-                    severity=ReviewFindingSeverity(f.get("severity", "INFO")),
-                    category=ReviewCategory(f.get("category", "CORRECTNESS")),
-                    file_path=f.get("file_path", "unknown"),
-                    start_line=f.get("start_line"),
-                    end_line=f.get("end_line"),
-                    description=f.get("description", ""),
-                    evidence=f.get("evidence"),
-                    recommendation=f.get("recommendation"),
-                )
-                findings.append(finding_obj.model_dump())
-        except Exception as err:
-            logger.info("Using default clean review output due to model response format: %s", err)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Reviewer model response must be a JSON dictionary, got {type(parsed)}")
+
+        raw_status = str(parsed.get("status", "")).upper()
+        if raw_status not in {"APPROVED", "CHANGES_REQUESTED"}:
+            raise ValueError(f"Invalid review status '{raw_status}' from model. Expected APPROVED or CHANGES_REQUESTED.")
+
+        summary = str(parsed.get("summary", "Review completed."))
+        raw_findings = parsed.get("findings", [])
+        if not isinstance(raw_findings, list):
+            raise ValueError(f"Reviewer findings must be a list, got {type(raw_findings)}")
+
+        findings: list[dict[str, Any]] = []
+        for f in raw_findings:
+            if not isinstance(f, dict):
+                raise ValueError(f"Review finding item must be a dictionary, got {type(f)}")
+
+            raw_sev = str(f.get("severity", "INFO")).strip().upper()
+            sev_val = ReviewFindingSeverity.INFO
+            for s in ReviewFindingSeverity:
+                if s.value in raw_sev:
+                    sev_val = s
+                    break
+
+            raw_cat = str(f.get("category", "CORRECTNESS")).strip().upper()
+            cat_val = ReviewCategory.CORRECTNESS
+            if any(k in raw_cat for k in ("SEC", "INJECT", "AUTH", "VULN", "EXPOS", "CRED", "LEAK")):
+                cat_val = ReviewCategory.SECURITY
+            elif "REGRESS" in raw_cat:
+                cat_val = ReviewCategory.REGRESSION
+            elif any(k in raw_cat for k in ("CORRECT", "BUG", "ERROR", "VALID", "CONTRACT", "API", "SCHEMA")):
+                cat_val = ReviewCategory.CORRECTNESS
+            elif any(k in raw_cat for k in ("ARCH", "DESIGN", "STRUCT")):
+                cat_val = ReviewCategory.ARCHITECTURE
+            elif any(k in raw_cat for k in ("TEST", "COVER")):
+                cat_val = ReviewCategory.TEST_COVERAGE
+            elif any(k in raw_cat for k in ("STYLE", "LINT", "FORMAT", "NAMING")):
+                cat_val = ReviewCategory.STYLE
+
+            finding_obj = ReviewFindingSchema(
+                severity=sev_val,
+                category=cat_val,
+                file_path=str(f.get("file_path", "unknown")),
+                start_line=f.get("start_line"),
+                end_line=f.get("end_line"),
+                description=str(f.get("description", "")),
+                evidence=f.get("evidence"),
+                recommendation=f.get("recommendation"),
+            )
+            findings.append(finding_obj.model_dump())
+
+
 
         # Determine if any critical or high findings block approval
         has_blocking_defects = any(

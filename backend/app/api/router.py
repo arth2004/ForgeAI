@@ -3,6 +3,8 @@ from fastapi import APIRouter
 from app.api.v1.agent import router as agent_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.github import router as github_router
+from app.api.v1.github_pulls import router as github_pulls_router
+from app.api.v1.github_webhooks import router as github_webhooks_router
 from app.api.v1.health import router as health_router
 from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.organizations import router as organizations_router
@@ -16,9 +18,12 @@ api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(github_router, prefix="/github", tags=["GitHub Integration"])
+api_router.include_router(github_webhooks_router, prefix="/github", tags=["GitHub Webhooks"])
+api_router.include_router(github_pulls_router, prefix="/github", tags=["GitHub Pull Requests"])
 api_router.include_router(organizations_router)
 api_router.include_router(projects_router)
 api_router.include_router(repositories_router)
 api_router.include_router(ingestion_router)
 api_router.include_router(worker_router)
 api_router.include_router(agent_router)
+

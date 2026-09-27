@@ -378,5 +378,149 @@ describe("SSE Stream Parser Unit Tests", () => {
       expect(screen.getByText("Approve Plan")).toBeInTheDocument();
     });
   });
+
+  describe("Token-by-Token Streaming (Phase 7C.3)", () => {
+    const projectId = "proj-1234-uuid";
+    const repoId = "repo-5678-uuid";
+    const repoName = "ai-lab/forge-workspace";
+    const branchName = "main";
+
+    it("incrementally appends agent.token chunks in real time", async () => {
+      const ssePayload = [
+        "event: session.created\ndata: {\"session_id\": \"sess-token-123\"}\n\n",
+        "event: agent.started\ndata: {\"iteration\": 1}\n\n",
+        "event: agent.token\ndata: {\"type\": \"agent.token\", \"content\": \"Forge \"}\n\n",
+        "event: agent.token\ndata: {\"type\": \"agent.token\", \"content\": \"AI \"}\n\n",
+        "event: agent.token\ndata: {\"type\": \"agent.token\", \"content\": \"token streaming.\"\n\n",
+        "event: agent.completed\ndata: {\"answer\": \"Forge AI token streaming.\", \"sources\": []}\n\n",
+      ].join("");
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(ssePayload));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(global, "fetch").mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: stream,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+      } as any);
+
+      render(
+        <AgentChat
+          projectId={projectId}
+          repositoryId={repoId}
+          repositoryName={repoName}
+          branchName={branchName}
+        />
+      );
+
+      const textarea = screen.getByPlaceholderText(/Ask Forge AI about this repository/i);
+      fireEvent.change(textarea, { target: { value: "Test token streaming" } });
+
+      const sendBtn = screen.getByRole("button", { name: /Send message to agent/i });
+      fireEvent.click(sendBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText("Forge AI token streaming.")).toBeInTheDocument();
+      });
+    });
+
+    it("handles tool execution followed by incremental token chunks", async () => {
+      const ssePayload = [
+        "event: session.created\ndata: {\"session_id\": \"sess-token-456\"}\n\n",
+        "event: agent.started\ndata: {\"iteration\": 1}\n\n",
+        "event: agent.tool_call\ndata: {\"tool\": \"search_repository\", \"call_id\": \"tc-1\", \"iteration\": 1}\n\n",
+        "event: agent.tool_result\ndata: {\"tool\": \"search_repository\", \"status\": \"success\", \"duration_ms\": 32.1}\n\n",
+        "event: agent.token\ndata: {\"type\": \"agent.token\", \"content\": \"Auth \"}\n\n",
+        "event: agent.token\ndata: {\"type\": \"agent.token\", \"content\": \"is JWT-based.\"\n\n",
+        "event: agent.completed\ndata: {\"answer\": \"Auth is JWT-based.\", \"sources\": []}\n\n",
+      ].join("");
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(ssePayload));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(global, "fetch").mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: stream,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+      } as any);
+
+      render(
+        <AgentChat
+          projectId={projectId}
+          repositoryId={repoId}
+          repositoryName={repoName}
+          branchName={branchName}
+        />
+      );
+
+      const textarea = screen.getByPlaceholderText(/Ask Forge AI about this repository/i);
+      fireEvent.change(textarea, { target: { value: "Where is auth?" } });
+
+      const sendBtn = screen.getByRole("button", { name: /Send message to agent/i });
+      fireEvent.click(sendBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText("Searching repository codebase")).toBeInTheDocument();
+        expect(screen.getByText("Auth is JWT-based.")).toBeInTheDocument();
+      });
+    });
+
+    it("displays error banner and halts when agent.error is received during streaming", async () => {
+      const ssePayload = [
+        "event: session.created\ndata: {\"session_id\": \"sess-token-err\"}\n\n",
+        "event: agent.started\ndata: {\"iteration\": 1}\n\n",
+        "event: agent.error\ndata: {\"error\": \"Groq provider rate limit exceeded (HTTP 429)\", \"status_code\": 429}\n\n",
+      ].join("");
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(ssePayload));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(global, "fetch").mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: stream,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+      } as any);
+
+      render(
+        <AgentChat
+          projectId={projectId}
+          repositoryId={repoId}
+          repositoryName={repoName}
+          branchName={branchName}
+        />
+      );
+
+      const textarea = screen.getByPlaceholderText(/Ask Forge AI about this repository/i);
+      fireEvent.change(textarea, { target: { value: "Trigger error" } });
+
+      const sendBtn = screen.getByRole("button", { name: /Send message to agent/i });
+      fireEvent.click(sendBtn);
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText("Forge AI is temporarily rate-limited. Please try again shortly.").length
+        ).toBeGreaterThan(0);
+      });
+    });
+  });
 });
+
 

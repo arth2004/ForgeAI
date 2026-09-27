@@ -137,13 +137,14 @@ def test_get_chat_model_provider_factory():
 
 
 def test_gemini_model_configuration_defaults_and_no_stale_fallbacks():
-    """Verifies that AGENT_GEMINI_MODEL defaults to gemini-3.1-pro-preview with no stale fallbacks."""
+    """Verifies that AGENT_GEMINI_MODEL defaults to gemini-3.1-flash-lite with no stale fallbacks."""
     from app.core.config import settings
 
-    assert settings.AGENT_GEMINI_MODEL == "gemini-3.1-pro-preview"
+    assert settings.AGENT_GEMINI_MODEL == "gemini-3.1-flash-lite"
 
     config_default = AgentConfig.from_settings(provider_override="google")
-    assert config_default.model_name == "gemini-3.1-pro-preview"
+    assert config_default.model_name == "gemini-3.1-flash-lite"
+
 
     # Explicit override is respected
     config_custom = AgentConfig.from_settings(
@@ -156,8 +157,9 @@ def test_gemini_model_configuration_defaults_and_no_stale_fallbacks():
     assert config_default.model_name not in stale_models
 
     provider_default = GeminiChatModelProvider()
-    assert provider_default.model_name == "gemini-3.1-pro-preview"
+    assert provider_default.model_name == "gemini-3.1-flash-lite"
     assert provider_default.model_name not in stale_models
+
 
 
 def test_gemini_provider_function_calling_payload():

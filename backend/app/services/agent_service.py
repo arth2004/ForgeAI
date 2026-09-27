@@ -350,14 +350,35 @@ class AgentService:
 
         accumulated_retrieved_context: list[dict[str, Any]] = []
         accumulated_tool_results: list[dict[str, Any]] = []
+        accumulated_tokens: list[str] = []
         final_answer: str = ""
         iteration_count: int = 1
 
-        try:
-            stream_gen = graph.astream(initial_state, stream_mode="updates")
+        event_queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
 
-            async def _consume_stream():
-                nonlocal final_answer, iteration_count
+        async def _on_token(token_text: str) -> None:
+            accumulated_tokens.append(token_text)
+            await event_queue.put(
+                (
+                    "agent.token",
+                    {
+                        "type": "agent.token",
+                        "content": token_text,
+                    },
+                )
+            )
+
+        graph = build_agent_graph(
+            model_provider=model_provider_override,
+            db_session=self.db,
+            user_id=user.id,
+            on_token=_on_token,
+        )
+
+        async def _run_graph_task() -> None:
+            nonlocal final_answer, iteration_count
+            try:
+                stream_gen = graph.astream(initial_state, stream_mode="updates")
                 async for update in stream_gen:
                     if not isinstance(update, dict):
                         continue
@@ -372,14 +393,16 @@ class AgentService:
                             tool_calls = getattr(last_m, "tool_calls", None) or []
                             if tool_calls:
                                 for tc in tool_calls:
-                                    yield _format_sse(
-                                        "agent.tool_call",
-                                        {
-                                            "tool": tc.get("name"),
-                                            "call_id": tc.get("id"),
-                                            "iteration": iteration_count,
-                                            "args": tc.get("args", {}),
-                                        },
+                                    await event_queue.put(
+                                        (
+                                            "agent.tool_call",
+                                            {
+                                                "tool": tc.get("name"),
+                                                "call_id": tc.get("id"),
+                                                "iteration": iteration_count,
+                                                "args": tc.get("args", {}),
+                                            },
+                                        )
                                     )
                             else:
                                 final_answer = str(last_m.content)
@@ -388,27 +411,44 @@ class AgentService:
                     if "tools" in update:
                         tools_update = update["tools"]
                         new_tools = tools_update.get("tool_results", [])
-                        # Check newly executed tool items
                         for res in new_tools[len(accumulated_tool_results) :]:
                             accumulated_tool_results.append(res)
-                            yield _format_sse(
-                                "agent.tool_result",
-                                {
-                                    "tool": res.get("tool"),
-                                    "status": "success" if res.get("success") else "failed",
-                                    "duration_ms": res.get("duration_ms", 0.0),
-                                    "error": res.get("error"),
-                                },
+                            await event_queue.put(
+                                (
+                                    "agent.tool_result",
+                                    {
+                                        "tool": res.get("tool"),
+                                        "status": "success" if res.get("success") else "failed",
+                                        "duration_ms": res.get("duration_ms", 0.0),
+                                        "error": res.get("error"),
+                                    },
+                                )
                             )
                         new_context = tools_update.get("retrieved_context", [])
                         accumulated_retrieved_context.clear()
                         accumulated_retrieved_context.extend(new_context)
+            finally:
+                await event_queue.put(None)
 
-            # Consume async generator with timeout
-            async for sse_event in _consume_stream():
-                yield sse_event
+        graph_task = asyncio.create_task(_run_graph_task())
+
+        try:
+            while True:
+                item = await asyncio.wait_for(event_queue.get(), timeout=timeout_seconds)
+                if item is None:
+                    break
+                evt_type, evt_data = item
+                yield _format_sse(evt_type, evt_data)
+
+            # Check if graph task failed with an exception
+            if graph_task.done() and graph_task.exception():
+                task_exc = graph_task.exception()
+                if task_exc:
+                    raise task_exc
 
         except TimeoutError:
+            if not graph_task.done():
+                graph_task.cancel()
             yield _format_sse(
                 "agent.error",
                 {
@@ -418,10 +458,15 @@ class AgentService:
             )
             return
         except Exception as exc:
+            if not graph_task.done():
+                graph_task.cancel()
             sanitized = sanitize_secret_text(str(exc))
             logger.error(f"[AgentService:stream_chat] Stream error: {sanitized}")
             yield _format_sse("agent.error", {"error": sanitized, "status_code": 500})
             return
+        finally:
+            if not graph_task.done():
+                graph_task.cancel()
 
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
         sources = self._extract_deduplicated_sources(accumulated_retrieved_context)
@@ -433,12 +478,14 @@ class AgentService:
             retrieved_sources_count=len(accumulated_retrieved_context),
         )
 
+        resolved_answer = final_answer or "".join(accumulated_tokens)
+
         completed_payload = {
             "session_id": str(session.id),
             "project_id": str(session.project_id),
             "repository_id": str(session.repository_id),
             "branch_id": str(session.branch_id) if session.branch_id else None,
-            "answer": final_answer,
+            "answer": resolved_answer,
             "sources": [s.model_dump() for s in sources],
             "metadata": metadata.model_dump(),
         }

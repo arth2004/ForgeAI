@@ -2,7 +2,7 @@ import json
 import re
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,14 +86,19 @@ class Settings(BaseSettings):
     GITHUB_APP_SLUG: str = Field(default="forge-ai-app")
     GITHUB_CLIENT_ID: str = Field(default="")
     GITHUB_CLIENT_SECRET: str = Field(default="")
+    GITHUB_WEBHOOK_SECRET: str = Field(default="test-github-webhook-secret-change-in-production")
     GITHUB_PRIVATE_KEY: str = Field(default="")
     GITHUB_PRIVATE_KEY_PATH: str = Field(default="")
     GITHUB_REDIRECT_URI: str = Field(default="http://localhost:8000/api/v1/github/callback")
+    GITHUB_WEBHOOK_MAX_BYTES: int = Field(default=5_242_880)  # 5 MB
+    MAX_PR_DIFF_BYTES: int = Field(default=524_288)  # 500 KB
+    MAX_PR_CHANGED_FILES: int = Field(default=50)
 
     # Phase 3 Embedding & Indexing Settings
+
     EMBEDDING_PROVIDER: str = Field(default="google")
     GEMINI_API_KEY: str = Field(default="")
-    GEMINI_EMBEDDING_MODEL: str = Field(default="gemini-embedding-2")
+    GEMINI_EMBEDDING_MODEL: str = Field(default="gemini-embedding-001")
     GEMINI_EMBEDDING_DIMENSION: int = Field(default=768)
 
     OPENAI_API_KEY: str = Field(default="")
@@ -113,11 +118,11 @@ class Settings(BaseSettings):
 
     # Phase 4A Agent Foundation Settings
     AGENT_DEFAULT_PROVIDER: str = Field(
-        default="google",
-        description="Default LLM provider: google, openai, groq, openai_compatible, or mock",
+        default="groq",
+        description="Default LLM provider: groq, google, openai, openai_compatible, or mock",
     )
     AGENT_GEMINI_MODEL: str = Field(
-        default="gemini-3.1-pro-preview", description="Default Google Gemini chat model"
+        default="gemini-3.1-flash-lite", description="Default Google Gemini chat model"
     )
     AGENT_OPENAI_MODEL: str = Field(default="gpt-4o", description="Default OpenAI chat model")
     AGENT_TEMPERATURE: float = Field(
@@ -154,6 +159,43 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() == "production"
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.is_production:
+            insecure_jwt_defaults = {
+                "super-secret-jwt-key-change-in-production-min-32-chars-forgeai",
+                "secret",
+                "changeme",
+                "",
+            }
+            insecure_enc_defaults = {
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "",
+            }
+            insecure_webhook_defaults = {
+                "test-github-webhook-secret-change-in-production",
+                "",
+            }
+
+            if not self.JWT_SECRET or self.JWT_SECRET in insecure_jwt_defaults or len(self.JWT_SECRET) < 32:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION: JWT_SECRET must be set to a secure, "
+                    "unique secret with at least 32 characters in production."
+                )
+
+            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in insecure_enc_defaults or len(self.ENCRYPTION_KEY) != 64:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION: ENCRYPTION_KEY must be a valid 64-character "
+                    "hex string (32 bytes) in production."
+                )
+
+            if not self.GITHUB_WEBHOOK_SECRET or self.GITHUB_WEBHOOK_SECRET in insecure_webhook_defaults:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION: GITHUB_WEBHOOK_SECRET must be configured "
+                    "with a secure, non-default secret in production."
+                )
+        return self
 
 
 settings = Settings()

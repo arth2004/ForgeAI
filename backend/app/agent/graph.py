@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -5,6 +6,7 @@ import uuid
 from typing import Any, Literal
 
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -39,6 +41,8 @@ async def agent_node(
     config: RunnableConfig | None = None,
     model_provider_override: BaseChatModelProvider | None = None,
     system_prompt_override: str | None = None,
+    on_token_override: Any = None,
+    max_iterations_override: int | None = None,
 ) -> dict[str, Any]:
     """Core Agent reasoning node in the LangGraph graph.
 
@@ -84,11 +88,90 @@ async def agent_node(
             f"model={provider.model_name} message_count={len(messages)}"
         )
 
+    on_token = on_token_override or (config.get("configurable", {}).get("on_token") if config else None)
+
     # 2. Invoke Model Provider Abstraction
     start_time = time.perf_counter()
     try:
-        response_msg = await provider.ainvoke(messages)
-        content_str = str(response_msg.content)
+        if on_token is not None:
+            # Genuine streaming path
+            accumulated_content: list[str] = []
+            accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+
+            async for chunk in provider.astream(messages):
+                # Handle text chunks
+                if chunk.content:
+                    text_piece = str(chunk.content)
+                    accumulated_content.append(text_piece)
+                    if callable(on_token):
+                        cb_res = on_token(text_piece)
+                        if asyncio.iscoroutine(cb_res):
+                            await cb_res
+
+                # Handle tool calls deltas
+                raw_tool_calls = (
+                    chunk.additional_kwargs.get("tool_calls")
+                    if hasattr(chunk, "additional_kwargs")
+                    else getattr(chunk, "tool_calls", None)
+                ) or []
+                if not raw_tool_calls and getattr(chunk, "tool_calls", None):
+                    raw_tool_calls = chunk.tool_calls
+
+                for tc in raw_tool_calls:
+                    if isinstance(tc, dict):
+                        idx = tc.get("index", 0)
+                        if idx not in accumulated_tool_calls:
+                            accumulated_tool_calls[idx] = {
+                                "id": tc.get("id") or str(uuid.uuid4()),
+                                "name": tc.get("function", {}).get("name", "") if isinstance(tc.get("function"), dict) else str(tc.get("name", "")),
+                                "args_str": tc.get("function", {}).get("arguments", "") if isinstance(tc.get("function"), dict) else (json.dumps(tc.get("args", {})) if isinstance(tc.get("args"), dict) else str(tc.get("args", ""))),
+                                "args": tc.get("args") if isinstance(tc.get("args"), dict) else None,
+                            }
+                        else:
+                            if tc.get("id"):
+                                accumulated_tool_calls[idx]["id"] = tc.get("id")
+                            if isinstance(tc.get("function"), dict):
+                                func = tc["function"]
+                                if func.get("name"):
+                                    accumulated_tool_calls[idx]["name"] += func["name"]
+                                if func.get("arguments"):
+                                    accumulated_tool_calls[idx]["args_str"] += func["arguments"]
+
+                # Handle Google Gemini functionCall
+                fc = chunk.additional_kwargs.get("functionCall") if hasattr(chunk, "additional_kwargs") else None
+                if fc and isinstance(fc, dict):
+                    accumulated_tool_calls[0] = {
+                        "id": str(uuid.uuid4()),
+                        "name": fc.get("name", ""),
+                        "args": fc.get("args", {}),
+                        "args_str": "",
+                    }
+
+            # Reconstruct final tool calls
+            final_tool_calls: list[dict[str, Any]] = []
+            for idx in sorted(accumulated_tool_calls.keys()):
+                tc_entry = accumulated_tool_calls[idx]
+                if tc_entry.get("args") is not None and isinstance(tc_entry["args"], dict):
+                    args = tc_entry["args"]
+                else:
+                    args_str = tc_entry.get("args_str", "{}")
+                    try:
+                        args = json.loads(args_str) if args_str else {}
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                final_tool_calls.append({
+                    "id": tc_entry.get("id", str(uuid.uuid4())),
+                    "name": tc_entry.get("name", ""),
+                    "args": args,
+                })
+
+            content_str = "".join(accumulated_content)
+            response_msg: BaseMessage = AIMessage(content=content_str, tool_calls=final_tool_calls)
+        else:
+            # Standard non-streaming path
+            response_msg = await provider.ainvoke(messages)
+            content_str = str(response_msg.content)
+
         tool_calls = getattr(response_msg, "tool_calls", None) or []
         has_tools = len(tool_calls) > 0
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -118,6 +201,7 @@ async def agent_node(
             state_update["final_answer"] = content_str
 
         return state_update
+
 
     except ModelProviderException as mpe:
         sanitized_msg = sanitize_secret_text(mpe.message)
@@ -149,9 +233,10 @@ def tool_router(
     tool_calls = getattr(last_msg, "tool_calls", None)
 
     current_iter = state.get("iteration_count", 0)
-    if current_iter >= max_iterations:
+    limit = state.get("max_iterations", max_iterations)
+    if current_iter >= limit:
         logger.warning(
-            f"[agent.execution.limit_reached] Reached maximum tool iteration limit ({max_iterations}). Halting graph."
+            f"[agent.execution.limit_reached] Reached maximum tool iteration limit ({limit}). Halting graph."
         )
         return "__end__"
 
@@ -310,6 +395,7 @@ def build_agent_graph(
     tool_guard: ToolUsageGuard | None = None,
     max_iterations: int = MAX_AGENT_ITERATIONS,
     system_prompt: str | None = None,
+    on_token: Any = None,
 ) -> CompiledStateGraph:
     """Constructs and compiles the Phase 4 LangGraph agent graph with repository reasoning loop.
 
@@ -328,6 +414,8 @@ def build_agent_graph(
             config,
             model_provider_override=model_provider,
             system_prompt_override=system_prompt,
+            on_token_override=on_token,
+            max_iterations_override=max_iterations,
         )
 
     # Bound Tools Node

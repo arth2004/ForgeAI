@@ -4,3 +4,14 @@ out
 build
 .git
 .turbo
+
+# Secrets and environment configurations
+.env
+.env.*
+.env.local
+*.pem
+*.key
+
+# Tests and documentation
+tests/
+*.md

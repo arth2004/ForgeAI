@@ -182,6 +182,24 @@ export function useAgentChat({ projectId, repositoryId, branchId }: UseAgentChat
                 break;
               }
 
+              case "agent.token": {
+                const tokenText = typeof data.content === "string" ? data.content : typeof data.token === "string" ? data.token : "";
+                if (tokenText) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? {
+                            ...msg,
+                            content: (msg.content || "") + tokenText,
+                            status: "streaming",
+                          }
+                        : msg
+                    )
+                  );
+                }
+                break;
+              }
+
               case "agent.completed":
                 if (data.session_id) {
                   setSessionId(data.session_id);
@@ -191,8 +209,8 @@ export function useAgentChat({ projectId, repositoryId, branchId }: UseAgentChat
                     msg.id === assistantMsgId
                       ? {
                           ...msg,
-                          content: data.answer || "Answer generated.",
-                          sources: (data.sources as AgentSource[]) || [],
+                          content: data.answer || msg.content || "Answer generated.",
+                          sources: (data.sources as AgentSource[]) || msg.sources || [],
                           status: "completed",
                         }
                       : msg

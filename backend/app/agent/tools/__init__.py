@@ -62,11 +62,17 @@ def get_agent_tools() -> list[BaseRepositoryTool]:
 
 
 def get_agent_tool_by_name(tool_name: str) -> BaseRepositoryTool | None:
-    """Finds a registered tool by its name."""
-    for t in get_agent_tools():
+    """Finds a registered tool by its name, resolving provider namespace prefixes."""
+    tools = get_agent_tools()
+    for t in tools:
         if t.name == tool_name:
             return t
+    cleaned_name = tool_name.split(".")[-1].split(":")[-1]
+    for t in tools:
+        if t.name == cleaned_name:
+            return t
     return None
+
 
 
 __all__ = [
