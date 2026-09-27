@@ -9,6 +9,9 @@ def test_language_detection():
     assert language_registry.detect_language("docs/README.md") == SupportedLanguage.MARKDOWN
     assert language_registry.detect_language("package.json") == SupportedLanguage.JSON
     assert language_registry.detect_language("docker-compose.yml") == SupportedLanguage.YAML
+    assert language_registry.detect_language("public/index.html") == SupportedLanguage.HTML
+    assert language_registry.detect_language("styles/global.css") == SupportedLanguage.CSS
+    assert language_registry.detect_language("styles/theme.scss") == SupportedLanguage.CSS
     assert language_registry.detect_language("Makefile") == SupportedLanguage.UNKNOWN
 
 

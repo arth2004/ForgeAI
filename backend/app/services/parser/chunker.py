@@ -61,10 +61,12 @@ class CodeChunker:
             header_str += f" {part_suffix}"
 
         # Choose comment syntax based on file extension
-        if file_path.endswith((".py", ".yaml", ".yml")):
+        if file_path.endswith((".py", ".yaml", ".yml", ".sh", ".bash", ".zsh", ".toml")):
             return f"# {header_str}\n"
-        elif file_path.endswith((".md", ".mdx")):
+        elif file_path.endswith((".md", ".mdx", ".html", ".htm")):
             return f"<!-- {header_str} -->\n"
+        elif file_path.endswith((".css", ".scss", ".sass", ".less", ".sql")):
+            return f"/* {header_str} */\n"
         else:
             return f"// {header_str}\n"
 

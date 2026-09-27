@@ -14,9 +14,14 @@ class SupportedLanguage(StrEnum):
     TYPESCRIPT = "typescript"
     TSX = "tsx"
     JAVASCRIPT = "javascript"
+    HTML = "html"
+    CSS = "css"
     MARKDOWN = "markdown"
     JSON = "json"
     YAML = "yaml"
+    SQL = "sql"
+    SHELL = "shell"
+    TOML = "toml"
     UNKNOWN = "unknown"
 
 
@@ -28,11 +33,22 @@ EXTENSION_TO_LANGUAGE: dict[str, SupportedLanguage] = {
     ".jsx": SupportedLanguage.JAVASCRIPT,
     ".mjs": SupportedLanguage.JAVASCRIPT,
     ".cjs": SupportedLanguage.JAVASCRIPT,
+    ".html": SupportedLanguage.HTML,
+    ".htm": SupportedLanguage.HTML,
+    ".css": SupportedLanguage.CSS,
+    ".scss": SupportedLanguage.CSS,
+    ".sass": SupportedLanguage.CSS,
+    ".less": SupportedLanguage.CSS,
     ".md": SupportedLanguage.MARKDOWN,
     ".mdx": SupportedLanguage.MARKDOWN,
     ".json": SupportedLanguage.JSON,
     ".yaml": SupportedLanguage.YAML,
     ".yml": SupportedLanguage.YAML,
+    ".sql": SupportedLanguage.SQL,
+    ".sh": SupportedLanguage.SHELL,
+    ".bash": SupportedLanguage.SHELL,
+    ".zsh": SupportedLanguage.SHELL,
+    ".toml": SupportedLanguage.TOML,
 }
 
 
