@@ -1,0 +1,127 @@
+services:
+  # --------------------------------------------------------------------------
+  # 1. FastAPI REST API & SSE Streaming Gateway
+  # --------------------------------------------------------------------------
+  - type: web
+    name: forgeai-api
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install ."
+    preDeployCommand: "alembic upgrade head"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forgeai-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: forgeai-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: GITHUB_WEBHOOK_SECRET
+        generateValue: true
+      - key: BACKEND_CORS_ORIGINS
+        value: '["https://forgeai-frontend.onrender.com"]'
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: forgeai-frontend
+          property: url
+      - key: AGENT_DEFAULT_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # --------------------------------------------------------------------------
+  # 2. ARQ Background Task Engine (Repo Ingestion, AST Chunking & Reviews)
+  # --------------------------------------------------------------------------
+  - type: worker
+    name: forgeai-worker
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install ."
+    startCommand: "python -m arq app.workers.main.WorkerSettings"
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forgeai-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: forgeai-redis
+          property: connectionString
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: forgeai-api
+          envVarKey: JWT_SECRET
+      - key: ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: forgeai-api
+          envVarKey: ENCRYPTION_KEY
+      - key: GITHUB_WEBHOOK_SECRET
+        fromService:
+          type: web
+          name: forgeai-api
+          envVarKey: GITHUB_WEBHOOK_SECRET
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # --------------------------------------------------------------------------
+  # 3. Next.js 15 Frontend
+  # --------------------------------------------------------------------------
+  - type: web
+    name: forgeai-frontend
+    runtime: node
+    region: oregon
+    plan: starter
+    rootDir: frontend
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm run start"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.x
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: forgeai-api
+          property: url
+
+# ----------------------------------------------------------------------------
+# Databases & Cache
+# ----------------------------------------------------------------------------
+databases:
+  - name: forgeai-postgres
+    region: oregon
+    plan: starter
+    databaseName: forgeai
+    user: forgeai
+    postgresMajorVersion: 16
+
+# Redis Instance (Managed Key-Value Store)
+# Note: Render allows provisioning Redis as a service
